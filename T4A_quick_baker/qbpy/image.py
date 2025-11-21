@@ -134,6 +134,83 @@ class Image:
 
         return filepath
 
+
+    # Queue for expected renames performed at the end of the bake
+    # Stored at module level to survive during the bake lifetime
+    _expected_renames = []
+
+    @staticmethod
+    def enqueue_expected_rename(filepath: str, expected_base: str) -> None:
+        """Enqueue an expected rename to be flushed later.
+
+        Stores the tuple (filepath, expected_base) for later processing by
+        `flush_expected_renames`.
+        """
+        try:
+            Image._expected_renames.append((filepath, expected_base))
+            print(f"QB_DEBUG enqueue_expected_rename: queued '{filepath}' -> '{expected_base}'")
+        except Exception as e:
+            print(f"QB_DEBUG enqueue_expected_rename: failed to enqueue '{filepath}' -> '{expected_base}': {e}")
+
+    @staticmethod
+    def flush_expected_renames() -> None:
+        """Flush all enqueued expected renames.
+
+        This attempts to rename files on disk to match the expected base names.
+        Entries containing the `<UDIM>` placeholder are skipped because they
+        correspond to multiple files.
+        """
+        try:
+            import os
+            import glob
+
+            if not Image._expected_renames:
+                return
+
+            queue = list(Image._expected_renames)
+            Image._expected_renames.clear()
+
+            for filepath, expected_base in queue:
+                try:
+                    directory, filename = os.path.split(filepath)
+                    base, ext = os.path.splitext(filename)
+
+                    exp_base = os.path.splitext(expected_base)[0]
+
+                    if "<UDIM>" in exp_base:
+                        print(f"QB_DEBUG flush_expected_renames: skipping UDIM entry for '{filepath}' expected='{expected_base}'")
+                        continue
+
+                    target = os.path.join(directory, f"{exp_base}{ext}")
+
+                    if base == exp_base:
+                        # already correct
+                        continue
+
+                    # If target exists, remove it to allow overwrite
+                    if os.path.exists(target):
+                        try:
+                            os.remove(target)
+                        except Exception:
+                            print(f"QB_DEBUG flush_expected_renames: cannot remove existing target '{target}'")
+
+                    # If original file missing, try to find a close match
+                    if not os.path.exists(filepath):
+                        pattern = os.path.join(directory, f"{base}*{ext}")
+                        matches = glob.glob(pattern)
+                        if matches:
+                            filepath = matches[0]
+                        else:
+                            print(f"QB_DEBUG flush_expected_renames: source file not found '{filepath}'")
+                            continue
+
+                    os.rename(filepath, target)
+                    print(f"QB_DEBUG flush_expected_renames: renamed '{filepath}' -> '{target}'")
+                except Exception as e:
+                    print(f"QB_DEBUG flush_expected_renames: failed for '{filepath}' expected='{expected_base}': {e}")
+        except Exception as e:
+            print(f"QB_DEBUG flush_expected_renames: fatal error: {e}")
+
     @staticmethod
     def get_image(name: str) -> bpy.types.Image:
         """Get image by name.

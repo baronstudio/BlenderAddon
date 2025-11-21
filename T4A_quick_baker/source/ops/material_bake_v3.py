@@ -660,6 +660,12 @@ bpy.ops.wm.save_mainfile()
         return {"RUNNING_MODAL"}
 
     def finish(self, context):
+        # Flush any enqueued expected renames now that baking finished
+        try:
+            Image.flush_expected_renames()
+        except Exception:
+            pass
+
         self.clear(context)
 
         if context.area:

@@ -2096,6 +2096,12 @@ class Bake(Udim, Map):
             view_transform=bpy.context.scene.view_settings.view_transform,
         )
 
+        # Ensure on-disk filename matches the expected naming model
+        try:
+            Image.enqueue_expected_rename(filepath, name)
+        except Exception:
+            pass
+
         self.passthrough_image(image, filepath, map, map_name)
 
     def save_map(self, context, map: bpy.types.PropertyGroup):

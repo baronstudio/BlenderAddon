@@ -809,6 +809,11 @@ class QBAKER_OT_bake(Operator, Bake, ExportUVLayout):
 
     def finish(self, context):
         post_bake(context)
+        # Flush any enqueued expected renames now that baking finished
+        try:
+            Image.flush_expected_renames()
+        except Exception:
+            pass
         self.clear(context)
 
         if context.area:

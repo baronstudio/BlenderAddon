@@ -106,6 +106,7 @@ class QBAKER_OT_node_bake(Operator, Bake):
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
+
     def create_image(self, context, name, non_color) -> bpy.types.Image:
         if img := bpy.data.images.get(name):
             bpy.data.images.remove(img)
@@ -228,9 +229,17 @@ class QBAKER_OT_node_bake(Operator, Bake):
                     path = os.path.join(path, folder_name)
 
                 if self.prefs.qbaker.bake.use_auto_udim and len(self.udims) > 1:
-                    Image.save_image_as(image, path=path, name=f"{image.name}.<UDIM>")
+                    filepath = Image.save_image_as(image, path=path, name=f"{image.name}.<UDIM>")
+                    try:
+                        Image.enqueue_expected_rename(filepath, f"{image.name}.<UDIM>")
+                    except Exception:
+                        pass
                 else:
-                    Image.save_image_as(image, path=path)
+                    filepath = Image.save_image_as(image, path=path)
+                    try:
+                        Image.enqueue_expected_rename(filepath, image.name)
+                    except Exception:
+                        pass
 
     def bake_nodes(self, context):
         yield 1
@@ -299,6 +308,8 @@ class QBAKER_OT_node_bake(Operator, Bake):
             self.node_tree.nodes.active = self.active_node
 
         self.restore_render_settings(context)
+        
+        
         yield 0
 
     def modal(self, context, event):
@@ -319,6 +330,12 @@ class QBAKER_OT_node_bake(Operator, Bake):
         print(f"Bake Time: {round((time.time() - self.start_time), 2)} sec")
         if self.timer:
             context.window_manager.event_timer_remove(self.timer)
+
+        # Flush any enqueued expected renames now that baking finished
+        try:
+            Image.flush_expected_renames()
+        except Exception:
+            pass
 
     def cancel(self, context):
         self.finish(context)

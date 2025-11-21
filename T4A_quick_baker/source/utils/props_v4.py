@@ -3041,6 +3041,12 @@ class QBAKER_PG_bake(PropertyGroup):
         default=True,
     )
 
+    naming_include_material: BoolProperty(
+        name="Include $material",
+        description="Inclure le nom du matériau ($material) dans le nom de fichier",
+        default=True,
+    )
+
     naming_include_time: BoolProperty(
         name="Include Time",
         description="Insère l'heure actuelle (HHMMSS)",
@@ -3320,12 +3326,14 @@ class QBAKER_PG_bake(PropertyGroup):
         # Render existing batch_name template (it already handles $name, $size, $type etc.)
         template = self.batch_name or "$name_$size_$type"
 
-        # Respect toggles: allow user to disable automatic inclusion of $name and/or $size.
+        # Respect toggles: allow user to disable automatic inclusion of $name, $size and/or $material.
         # We remove tokens from the template before rendering (they will be replaced by empty string).
         if not getattr(self, "naming_include_name", True):
             template = template.replace("$name", "")
         if not getattr(self, "naming_include_size", True):
             template = template.replace("$size", "")
+        if not getattr(self, "naming_include_material", True):
+            template = template.replace("$material", "")
 
         # Mapping for tokens we support
         mapping = {
@@ -3442,6 +3450,10 @@ class QBAKER_PG_bake(PropertyGroup):
         row = box.row(align=True)
         row.prop(self, "naming_include_name", text="Include $name")
         row.prop(self, "naming_include_size", text="Include $size")
+
+        # Toggle for $material token
+        row = box.row(align=True)
+        row.prop(self, "naming_include_material", text="Include $material")
 
         row = box.row(align=True)
         row.prop(self, "naming_include_blendname", text="Blend name")

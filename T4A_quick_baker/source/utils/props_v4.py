@@ -3058,6 +3058,12 @@ class QBAKER_PG_bake(PropertyGroup):
         default="BAKEGROUP",
     )
 
+    naming_force_material_filename: BoolProperty(
+        name="Force Material Filename",
+        description="Forcer le nom de fichier final à utiliser le nom du matériau (si disponible). Le nom du sous-dossier reste contrôlé par 'Name Source'.",
+        default=False,
+    )
+
     naming_include_time: BoolProperty(
         name="Include Time",
         description="Insère l'heure actuelle (HHMMSS)",
@@ -3364,6 +3370,15 @@ class QBAKER_PG_bake(PropertyGroup):
             # ensure all keys are strings
             mapping.update({str(k): str(v) for k, v in extra_tokens.items()})
 
+        # Debugging: when Blender runs in background/batch, print received tokens and overrides
+        try:
+            import bpy as _bpy
+            if getattr(_bpy.app, "background", False):
+                print(f"QB_DEBUG build_filename: bake_group='{bake_group_name}', map_suffix='{map_suffix}', extra_tokens={extra_tokens}")
+                sys.stdout.flush()
+        except Exception:
+            pass
+
         # Resolve the effective $name value according to the user's selection
         # - BAKEGROUP: $name -> bake_group_name (default)
         # - MATERIAL: if a material token is provided, use it for $name
@@ -3380,6 +3395,21 @@ class QBAKER_PG_bake(PropertyGroup):
                 effective_name = mat_val
 
         mapping["name"] = effective_name
+
+        # If the user requests to force the final filename to use the material name,
+        # override the resolved $name with the material token if available.
+        if getattr(self, "naming_force_material_filename", False):
+            mat_val = mapping.get("material")
+            if mat_val:
+                old_name = mapping.get("name")
+                mapping["name"] = mat_val
+                try:
+                    import bpy as _bpy
+                    if getattr(_bpy.app, "background", False):
+                        print(f"QB_DEBUG build_filename: overriding name '{old_name}' -> '{mat_val}' due to naming_force_material_filename")
+                        sys.stdout.flush()
+                except Exception:
+                    pass
 
         # Replace tokens like $name, $size, $type, $format, etc.
         rendered = template
@@ -3474,16 +3504,15 @@ class QBAKER_PG_bake(PropertyGroup):
         row.prop(self, "naming_include_date", text="Date")
         row.prop(self, "naming_include_time", text="Time")
 
-        # Allow toggling inclusion of $name and $size tokens
+        # Allow toggling inclusion of $size token (we hide $name/$object checkboxes here)
         row = box.row(align=True)
-        row.prop(self, "naming_include_name", text="Include $name")
         row.prop(self, "naming_include_size", text="Include $size")
 
-        # Include object token and name source selection
-        row = box.row(align=True)
-        row.prop(self, "naming_include_object", text="Include $object")
+        # Name source selection and optional force-to-material filename toggle
         row = box.row(align=True)
         row.prop(self, "naming_name_source", text="Name Source")
+        row = box.row(align=True)
+        row.prop(self, "naming_force_material_filename", text="Force filename to material")
 
         row = box.row(align=True)
         row.prop(self, "naming_include_blendname", text="Blend name")
@@ -3500,7 +3529,48 @@ class QBAKER_PG_bake(PropertyGroup):
                     bake_group_name = context.scene.qbaker.bake_groups[bg_index].name
         except Exception:
             bake_group_name = "BakeGroup"
-        preview_name = self.build_filename(context, bake_group_name=bake_group_name, map_suffix="$type")
+        # Build representative extra tokens for preview so the preview reflects
+        # the effect of 'Name Source' and 'Force filename to material'. We attempt
+        # to find a representative object and material from the active bake group.
+        extra_preview = {}
+        try:
+            baker = context.scene.qbaker
+            bg = baker.bake_groups[baker.active_bake_group_index]
+        except Exception:
+            bg = None
+
+        if bg:
+            # candidate object
+            try:
+                if getattr(bg, "use_high_to_low", False):
+                    objs = [item.object for group in bg.groups for item in group.high_poly]
+                else:
+                    objs = [item.object for item in bg.objects]
+                for o in objs:
+                    if o is not None:
+                        extra_preview["object"] = o.name
+                        break
+            except Exception:
+                pass
+
+            # candidate material
+            try:
+                mat_name = None
+                for item in getattr(bg, "objects", []):
+                    obj = getattr(item, "object", None)
+                    if obj and getattr(obj, "material_slots", None):
+                        for slot in obj.material_slots:
+                            if slot and slot.material:
+                                mat_name = slot.material.name
+                                break
+                    if mat_name:
+                        break
+                if mat_name:
+                    extra_preview["material"] = mat_name
+            except Exception:
+                pass
+
+        preview_name = self.build_filename(context, bake_group_name=bake_group_name, map_suffix="$type", extra_tokens=extra_preview or None)
         box.label(text=f"Preview: {preview_name}")
 
         col = layout.column(heading="Post Bake", align=True)

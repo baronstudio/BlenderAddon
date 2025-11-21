@@ -1825,31 +1825,68 @@ class Bake(Udim, Map):
             map_name (str): The name of the map.
         """
         # Build filename using centralized naming logic from the bake settings
+        # Prepare extra tokens similar to save_map_image so passthrough respects Name Source and force-material
+        extra = {}
         try:
-            batch_name = self.bake_settings.build_filename(bpy.context, bake_group_name=self.bake_group.name.strip(), map_suffix=map.suffix.strip())
+            name_source = getattr(self.bake_settings, "naming_name_source", "BAKEGROUP")
+        except Exception:
+            name_source = "BAKEGROUP"
+        if name_source == "OBJECT":
+            try:
+                if getattr(self.bake_group, "objects", None) and len(self.bake_group.objects) > 0:
+                    first_item = self.bake_group.objects[0]
+                    if getattr(first_item, "object", None):
+                        extra["object"] = first_item.object.name
+            except Exception:
+                pass
+        elif name_source == "MATERIAL":
+            try:
+                for item in getattr(self.bake_group, "objects", []):
+                    obj = getattr(item, "object", None)
+                    if obj and getattr(obj, "material_slots", None):
+                        for slot in obj.material_slots:
+                            if slot and slot.material:
+                                extra["material"] = slot.material.name
+                                break
+                    if "material" in extra:
+                        break
+            except Exception:
+                pass
+
+        # Safely obtain suffix from map (some map objects may not expose `suffix`)
+        try:
+            suffix = (getattr(map, "suffix", None) or getattr(map, "type", "") or "").strip()
+        except Exception:
+            try:
+                suffix = str(getattr(map, "type", "")).strip()
+            except Exception:
+                suffix = ""
+
+        try:
+            batch_name = self.bake_settings.build_filename(
+                bpy.context,
+                bake_group_name=self.bake_group.name.strip(),
+                map_suffix=suffix,
+                extra_tokens=extra or None,
+            )
         except Exception:
             # Fallback: keep a simple sane default (avoid legacy .replace chains)
-            batch_name = f"{self.bake_group.name.strip()}_{map.suffix.strip()}"
+            batch_name = f"{self.bake_group.name.strip()}_{suffix}"
 
         source = "TILED" if self.bake_settings.use_auto_udim and len(self.udims) > 1 else "FILE"
         color_space = "sRGB" if image.alpha_mode == "CHANNEL_PACKED" else image.colorspace_settings.name
 
-        print(
-            "%s\n"
-            % json.dumps(
-                {
-                    "type": self.TYPE_IMAGE,
-                    "active_bake_group_index": self.index,
-                    "name": batch_name,
-                    "suffix": map.suffix.strip(),
-                    "path": filepath,
-                    "source": source,
-                    "color_space": color_space,
-                    "alpha_mode": image.alpha_mode,
-                    "map_name": map_name,
-                }
-            )
-        )
+        print("%s\n" % json.dumps({
+            "type": self.TYPE_IMAGE,
+            "active_bake_group_index": self.index,
+            "name": batch_name,
+            "suffix": suffix,
+            "path": filepath,
+            "source": source,
+            "color_space": color_space,
+            "alpha_mode": image.alpha_mode,
+            "map_name": map_name,
+        }))
 
         sys.stdout.flush()
 
@@ -1964,11 +2001,25 @@ class Bake(Udim, Map):
                 pass
 
         ## Create the name of the image using the centralized builder
+        # Safely obtain suffix for use in name building
         try:
-            name = self.bake_settings.build_filename(bpy.context, bake_group_name=self.bake_group.name.strip(), map_suffix=map.suffix.strip(), extra_tokens=extra or None)
+            suffix = (getattr(map, "suffix", None) or getattr(map, "type", "") or "").strip()
+        except Exception:
+            try:
+                suffix = str(getattr(map, "type", "")).strip()
+            except Exception:
+                suffix = ""
+
+        try:
+            name = self.bake_settings.build_filename(
+                bpy.context,
+                bake_group_name=self.bake_group.name.strip(),
+                map_suffix=suffix,
+                extra_tokens=extra or None,
+            )
         except Exception:
             # Fallback: use a simple default name (avoid legacy .replace chains)
-            name = f"{self.bake_group.name.strip()}_{map.suffix.strip()}"
+            name = f"{self.bake_group.name.strip()}_{suffix}"
 
         if self.bake_settings.use_auto_udim and len(self.udims) > 1:
             name += ".<UDIM>"

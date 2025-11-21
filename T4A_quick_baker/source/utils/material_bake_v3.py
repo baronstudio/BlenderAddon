@@ -1527,36 +1527,40 @@ class Bake(Udim, Map):
             map (bpy.types.PointerProperty): The type of the map.
             map_name (str): The name of the map.
         """
+        # Safely obtain suffix
+        try:
+            suffix = (getattr(map, "suffix", None) or getattr(map, "type", "") or "").strip()
+        except Exception:
+            try:
+                suffix = str(getattr(map, "type", "")).strip()
+            except Exception:
+                suffix = ""
+
         try:
             batch_name = self.bake_settings.build_filename(
                 bpy.context,
                 bake_group_name=self.active_material.material.name.strip(),
-                map_suffix=map.suffix.strip(),
+                map_suffix=suffix,
                 extra_tokens={"material": self.active_material.material.name.strip()},
             )
         except Exception:
             # Fallback: simple default name to avoid chained .replace usage
-            batch_name = f"{self.active_material.material.name.strip()}_{map.suffix.strip()}"
+            batch_name = f"{self.active_material.material.name.strip()}_{suffix}"
 
         source = "FILE"
         color_space = "sRGB" if image.alpha_mode == "CHANNEL_PACKED" else image.colorspace_settings.name
 
-        print(
-            "%s\n"
-            % json.dumps(
-                {
-                    "type": self.TYPE_IMAGE,
-                    "active_bake_group_index": self.index,
-                    "name": batch_name,
-                    "suffix": map.suffix.strip(),
-                    "path": filepath,
-                    "source": source,
-                    "color_space": color_space,
-                    "alpha_mode": image.alpha_mode,
-                    "map_name": map_name,
-                }
-            )
-        )
+        print("%s\n" % json.dumps({
+            "type": self.TYPE_IMAGE,
+            "active_bake_group_index": self.index,
+            "name": batch_name,
+            "suffix": suffix,
+            "path": filepath,
+            "source": source,
+            "color_space": color_space,
+            "alpha_mode": image.alpha_mode,
+            "map_name": map_name,
+        }))
 
         sys.stdout.flush()
 
@@ -1649,12 +1653,12 @@ class Bake(Udim, Map):
             name = self.bake_settings.build_filename(
                 bpy.context,
                 bake_group_name=self.active_material.material.name.strip(),
-                map_suffix=map.suffix.strip(),
+                map_suffix=suffix,
                 extra_tokens=extra,
             )
         except Exception:
             # Fallback: simple default name to avoid chained .replace usage
-            name = f"{self.active_material.material.name.strip()}_{map.suffix.strip()}"
+            name = f"{self.active_material.material.name.strip()}_{suffix}"
 
         filepath = Image.save_image_as(
             image,

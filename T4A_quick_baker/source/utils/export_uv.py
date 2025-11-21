@@ -45,6 +45,34 @@ class ExportUVLayout:
             if obj_name:
                 extra["object"] = obj_name
 
+        # If user requested forcing filename to material, try to find a representative material
+        # and add it to extra tokens so build_filename can use it.
+        try:
+            force_mat = getattr(bake_group.bake, "naming_force_material_filename", False)
+        except Exception:
+            force_mat = False
+
+        if force_mat:
+            mat_name = None
+            try:
+                # search objects for a material
+                objs = objects
+                for o in objs:
+                    # prefer material slots (object-level), then mesh.data materials
+                    mats = []
+                    if hasattr(o, 'material_slots'):
+                        mats = [s.material for s in o.material_slots if s and s.material]
+                    if not mats and hasattr(o, 'data') and hasattr(o.data, 'materials'):
+                        mats = [m for m in o.data.materials if m]
+                    if mats:
+                        mat_name = mats[0].name
+                        break
+            except Exception:
+                mat_name = None
+
+            if mat_name:
+                extra["material"] = mat_name
+
         try:
             name = bake_group.bake.build_filename(bpy.context, bake_group_name=bake_group.name.strip(), map_suffix=map.wireframe.suffix.strip(), extra_tokens=extra or None)
         except Exception:

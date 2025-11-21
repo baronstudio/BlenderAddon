@@ -1605,14 +1605,52 @@ class Bake(Udim, Map):
         if self.bake_settings.folders:
             if path := self.bake_settings.folders[self.bake_settings.folder_index].path:
                 if self.bake_settings.use_sub_folder:
-                    path = os.path.join(path, self.active_material.material.name)
+                    # Determine folder name according to naming_name_source
+                    folder_name = self.active_material.material.name
+                    try:
+                        name_source = getattr(self.bake_settings, "naming_name_source", "BAKEGROUP")
+                    except Exception:
+                        name_source = "BAKEGROUP"
+
+                    if name_source == "OBJECT":
+                        obj_name = None
+                        for obj in bpy.data.objects:
+                            if obj.type == "MESH":
+                                for slot in getattr(obj, "material_slots", []):
+                                    if slot and slot.material is self.active_material.material:
+                                        obj_name = obj.name
+                                        break
+                                if obj_name:
+                                    break
+                        folder_name = obj_name or self.active_material.material.name
+                    elif name_source == "MATERIAL":
+                        folder_name = self.active_material.material.name
+                    else:
+                        folder_name = self.active_material.material.name
+
+                    path = os.path.join(path, folder_name)
+
+        extra = {"material": self.active_material.material.name.strip()}
+        try:
+            name_source = getattr(self.bake_settings, "naming_name_source", "BAKEGROUP")
+        except Exception:
+            name_source = "BAKEGROUP"
+        if name_source == "OBJECT":
+            for obj in bpy.data.objects:
+                if obj.type == "MESH":
+                    for slot in getattr(obj, "material_slots", []):
+                        if slot and slot.material is self.active_material.material:
+                            extra["object"] = obj.name
+                            break
+                    if "object" in extra:
+                        break
 
         try:
             name = self.bake_settings.build_filename(
                 bpy.context,
                 bake_group_name=self.active_material.material.name.strip(),
                 map_suffix=map.suffix.strip(),
-                extra_tokens={"material": self.active_material.material.name.strip()},
+                extra_tokens=extra,
             )
         except Exception:
             # Fallback: simple default name to avoid chained .replace usage

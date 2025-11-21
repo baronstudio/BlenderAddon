@@ -137,11 +137,22 @@ class QBAKER_OT_node_bake(Operator, Bake):
         )
 
         try:
+            extra_tokens = {"socket": output.name, "uvmap": self.node_baker.uv_map}
+            # include object/material tokens when available so naming_name_source can resolve $name
+            try:
+                obj = bpy.context.object
+                if obj is not None:
+                    extra_tokens["object"] = obj.name
+                    if getattr(obj, "active_material", None):
+                        extra_tokens["material"] = obj.active_material.name
+            except Exception:
+                pass
+
             name = self.node_baker.build_filename(
                 context,
                 bake_group_name=node.name,
                 map_suffix=output.name,
-                extra_tokens={"socket": output.name, "uvmap": self.node_baker.uv_map},
+                extra_tokens=extra_tokens,
             )
         except Exception:
             # Fallback: construct a simple, deterministic name (avoid chained .replace usage)
@@ -193,7 +204,28 @@ class QBAKER_OT_node_bake(Operator, Bake):
         if self.node_baker.folders:
             if path := self.node_baker.folders[self.node_baker.folder_index].path:
                 if self.node_baker.use_sub_folder:
-                    path = os.path.join(path, f"{node.name}")
+                    # Determine folder name based on naming_name_source
+                    folder_name = node.name
+                    try:
+                        name_source = getattr(self.node_baker, "naming_name_source", "BAKEGROUP")
+                    except Exception:
+                        name_source = "BAKEGROUP"
+                    if name_source == "OBJECT":
+                        try:
+                            obj = bpy.context.object
+                            if obj is not None:
+                                folder_name = obj.name
+                        except Exception:
+                            pass
+                    elif name_source == "MATERIAL":
+                        try:
+                            obj = bpy.context.object
+                            if obj is not None and getattr(obj, "active_material", None):
+                                folder_name = obj.active_material.name
+                        except Exception:
+                            pass
+
+                    path = os.path.join(path, folder_name)
 
                 if self.prefs.qbaker.bake.use_auto_udim and len(self.udims) > 1:
                     Image.save_image_as(image, path=path, name=f"{image.name}.<UDIM>")

@@ -1821,14 +1821,71 @@ class Bake(Udim, Map):
         self.tiff_codec = bake.tiff_codec
 
         path = self.bake_path
+        extra = {}
         if self.bake_settings.folders:
             if path := self.bake_settings.folders[self.bake_settings.folder_index].path:
                 if self.bake_settings.use_sub_folder:
-                    path = os.path.join(path, self.bake_group.name)
+                    folder_name = self.bake_group.name
+                    try:
+                        name_source = getattr(self.bake_settings, "naming_name_source", "BAKEGROUP")
+                    except Exception:
+                        name_source = "BAKEGROUP"
+                    if name_source == "OBJECT":
+                        try:
+                            if getattr(self.bake_group, "objects", None) and len(self.bake_group.objects) > 0:
+                                first_item = self.bake_group.objects[0]
+                                if getattr(first_item, "object", None):
+                                    folder_name = first_item.object.name
+                        except Exception:
+                            folder_name = self.bake_group.name
+                    elif name_source == "MATERIAL":
+                        mat_name = None
+                        try:
+                            for item in getattr(self.bake_group, "objects", []):
+                                obj = getattr(item, "object", None)
+                                if obj and getattr(obj, "material_slots", None):
+                                    for slot in obj.material_slots:
+                                        if slot and slot.material:
+                                            mat_name = slot.material.name
+                                            break
+                                if mat_name:
+                                    break
+                        except Exception:
+                            mat_name = None
+                        folder_name = mat_name or self.bake_group.name
+                    else:
+                        folder_name = self.bake_group.name
+                    path = os.path.join(path, folder_name)
+
+        try:
+            name_source = getattr(self.bake_settings, "naming_name_source", "BAKEGROUP")
+        except Exception:
+            name_source = "BAKEGROUP"
+        if name_source == "OBJECT":
+            try:
+                if getattr(self.bake_group, "objects", None) and len(self.bake_group.objects) > 0:
+                    first_item = self.bake_group.objects[0]
+                    if getattr(first_item, "object", None):
+                        extra["object"] = first_item.object.name
+            except Exception:
+                pass
+        elif name_source == "MATERIAL":
+            try:
+                for item in getattr(self.bake_group, "objects", []):
+                    obj = getattr(item, "object", None)
+                    if obj and getattr(obj, "material_slots", None):
+                        for slot in obj.material_slots:
+                            if slot and slot.material:
+                                extra["material"] = slot.material.name
+                                break
+                    if "material" in extra:
+                        break
+            except Exception:
+                pass
 
         try:
             name = self.bake_settings.build_filename(
-                bpy.context, bake_group_name=self.bake_group.name.strip(), map_suffix=map.suffix.strip()
+                bpy.context, bake_group_name=self.bake_group.name.strip(), map_suffix=map.suffix.strip(), extra_tokens=extra or None
             )
         except Exception:
             # Fallback: simple default name to avoid chained .replace usage

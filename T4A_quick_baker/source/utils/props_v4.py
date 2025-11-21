@@ -3041,10 +3041,21 @@ class QBAKER_PG_bake(PropertyGroup):
         default=True,
     )
 
-    naming_include_material: BoolProperty(
-        name="Include $material",
-        description="Inclure le nom du matériau ($material) dans le nom de fichier",
+    naming_include_object: BoolProperty(
+        name="Include $object",
+        description="Inclure le nom de l'objet porteur ($object) dans le nom de fichier",
         default=True,
+    )
+
+    naming_name_source: EnumProperty(
+        name="Name Source",
+        description="Source utilisée pour le token $name (BakeGroup / Material / Object)",
+        items=(
+            ("BAKEGROUP", "BakeGroup", "Utiliser le nom du BakeGroup pour $name"),
+            ("MATERIAL", "Material", "Utiliser le nom du matériau pour $name si disponible"),
+            ("OBJECT", "Object", "Utiliser le nom de l'objet pour $name si disponible"),
+        ),
+        default="BAKEGROUP",
     )
 
     naming_include_time: BoolProperty(
@@ -3082,7 +3093,7 @@ class QBAKER_PG_bake(PropertyGroup):
 
     use_sub_folder: BoolProperty(
         name="Sub Folder",
-        description="Create a sub folder for baked textures\n\nNote: The sub folder name will be the same as the BakeGroup name",
+        description="Create a sub folder for baked textures\n\nNote: The sub folder name will follow the 'Name Source' selection (BakeGroup / Material / Object)",
         default=False,
     )
 
@@ -3326,14 +3337,14 @@ class QBAKER_PG_bake(PropertyGroup):
         # Render existing batch_name template (it already handles $name, $size, $type etc.)
         template = self.batch_name or "$name_$size_$type"
 
-        # Respect toggles: allow user to disable automatic inclusion of $name, $size and/or $material.
+        # Respect toggles: allow user to disable automatic inclusion of $name, $size and/or $object.
         # We remove tokens from the template before rendering (they will be replaced by empty string).
         if not getattr(self, "naming_include_name", True):
             template = template.replace("$name", "")
         if not getattr(self, "naming_include_size", True):
             template = template.replace("$size", "")
-        if not getattr(self, "naming_include_material", True):
-            template = template.replace("$material", "")
+        if not getattr(self, "naming_include_object", True):
+            template = template.replace("$object", "")
 
         # Mapping for tokens we support
         mapping = {
@@ -3352,6 +3363,23 @@ class QBAKER_PG_bake(PropertyGroup):
         if extra_tokens:
             # ensure all keys are strings
             mapping.update({str(k): str(v) for k, v in extra_tokens.items()})
+
+        # Resolve the effective $name value according to the user's selection
+        # - BAKEGROUP: $name -> bake_group_name (default)
+        # - MATERIAL: if a material token is provided, use it for $name
+        # - OBJECT: if an object token is provided and inclusion is enabled, use it for $name
+        effective_name = bake_group_name
+        if getattr(self, "naming_name_source", "BAKEGROUP") == "OBJECT":
+            # prefer object token when present and allowed
+            obj_val = mapping.get("object")
+            if obj_val and getattr(self, "naming_include_object", True):
+                effective_name = obj_val
+        elif getattr(self, "naming_name_source", "BAKEGROUP") == "MATERIAL":
+            mat_val = mapping.get("material")
+            if mat_val:
+                effective_name = mat_val
+
+        mapping["name"] = effective_name
 
         # Replace tokens like $name, $size, $type, $format, etc.
         rendered = template
@@ -3451,9 +3479,11 @@ class QBAKER_PG_bake(PropertyGroup):
         row.prop(self, "naming_include_name", text="Include $name")
         row.prop(self, "naming_include_size", text="Include $size")
 
-        # Toggle for $material token
+        # Include object token and name source selection
         row = box.row(align=True)
-        row.prop(self, "naming_include_material", text="Include $material")
+        row.prop(self, "naming_include_object", text="Include $object")
+        row = box.row(align=True)
+        row.prop(self, "naming_name_source", text="Name Source")
 
         row = box.row(align=True)
         row.prop(self, "naming_include_blendname", text="Blend name")

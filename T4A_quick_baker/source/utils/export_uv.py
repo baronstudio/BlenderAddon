@@ -22,15 +22,46 @@ class ExportUVLayout:
         self.size_name = bpy.types.UILayout.enum_item_name(map.wireframe, "size", map.wireframe.size)
 
         # Use centralized filename builder on the bake group (fallback to legacy template)
+        extra = {}
         try:
-            name = bake_group.bake.build_filename(bpy.context, bake_group_name=bake_group.name.strip(), map_suffix=map.wireframe.suffix.strip())
+            name_source = getattr(bake_group.bake, "naming_name_source", "BAKEGROUP")
+        except Exception:
+            name_source = "BAKEGROUP"
+
+        if name_source == "OBJECT":
+            # attempt to find a representative object for this bake_group
+            obj_name = None
+            try:
+                if bake_group.use_high_to_low:
+                    objs = [item.object for group in bake_group.groups for item in group.high_poly]
+                else:
+                    objs = [item.object for item in bake_group.objects]
+                for o in objs:
+                    if o is not None:
+                        obj_name = o.name
+                        break
+            except Exception:
+                obj_name = None
+            if obj_name:
+                extra["object"] = obj_name
+
+        try:
+            name = bake_group.bake.build_filename(bpy.context, bake_group_name=bake_group.name.strip(), map_suffix=map.wireframe.suffix.strip(), extra_tokens=extra or None)
         except Exception:
             # Fallback: simple default name to avoid chained .replace usage
             name = f"{bake_group.name.strip()}_{map.wireframe.suffix.strip()}"
 
         if path := self.bake_settings.folders[self.bake_settings.folder_index].path:
             if self.bake_settings.use_sub_folder:
-                filepath = os.path.join(path, f"{bake_group.name}", name)
+                # Determine folder name according to name source
+                folder_name = bake_group.name
+                try:
+                    name_source = getattr(self.bake_settings, "naming_name_source", "BAKEGROUP")
+                except Exception:
+                    name_source = "BAKEGROUP"
+                if name_source == "OBJECT" and extra.get("object"):
+                    folder_name = extra.get("object")
+                filepath = os.path.join(path, folder_name, name)
             else:
                 filepath = os.path.join(path, name)
         else:

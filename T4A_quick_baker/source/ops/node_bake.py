@@ -144,12 +144,8 @@ class QBAKER_OT_node_bake(Operator, Bake):
                 extra_tokens={"socket": output.name, "uvmap": self.node_baker.uv_map},
             )
         except Exception:
-            name = (
-                self.node_baker.batch_name.replace("$node", node.name)
-                .replace("$socket", output.name)
-                .replace("$uvmap", self.node_baker.uv_map)
-                .replace("$size", size)
-            )
+            # Fallback: construct a simple, deterministic name (avoid chained .replace usage)
+            name = f"{node.name}_{output.name}_{size}"
 
         name = str(name)
         image = self.create_image(context, name, non_color)

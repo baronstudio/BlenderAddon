@@ -1593,13 +1593,8 @@ class Bake(Udim, Map):
                 extra_tokens={"material": self.active_material.material.name.strip()},
             )
         except Exception:
-            batch_name = (
-                self.bake_settings.batch_name.replace("$material", self.active_material.material.name.strip())
-                .replace("$size", self.size_name)
-                .replace("$type", map.suffix.strip())
-                if getattr(self.bake_settings, "batch_name", None)
-                else f"{self.active_material.material.name.strip()}_{map.suffix.strip()}"
-            )
+            # Fallback: simple default name to avoid chained .replace usage
+            batch_name = f"{self.active_material.material.name.strip()}_{map.suffix.strip()}"
 
         source = "FILE"
         color_space = "sRGB" if image.alpha_mode == "CHANNEL_PACKED" else image.colorspace_settings.name
@@ -1678,13 +1673,8 @@ class Bake(Udim, Map):
                 extra_tokens={"material": self.active_material.material.name.strip()},
             )
         except Exception:
-            name = (
-                self.bake_settings.batch_name.replace("$material", self.active_material.material.name.strip())
-                .replace("$size", self.size_name)
-                .replace("$type", map.suffix.strip())
-                if getattr(self.bake_settings, "batch_name", None)
-                else f"{self.active_material.material.name.strip()}_{map.suffix.strip()}"
-            )
+            # Fallback: simple default name to avoid chained .replace usage
+            name = f"{self.active_material.material.name.strip()}_{map.suffix.strip()}"
 
         filepath = Image.save_image_as(
             image,

@@ -1800,9 +1800,61 @@ class Bake(Udim, Map):
             image = bake_operation(context, map)
 
         if image:
-            name = map.name
+            # Build filename using centralized naming logic to match UI preview
+            extra = {}
+            try:
+                name_source = getattr(self.bake_settings, "naming_name_source", "BAKEGROUP")
+            except Exception:
+                name_source = "BAKEGROUP"
+            if name_source == "OBJECT":
+                try:
+                    if getattr(self.bake_group, "objects", None) and len(self.bake_group.objects) > 0:
+                        first_item = self.bake_group.objects[0]
+                        if getattr(first_item, "object", None):
+                            extra["object"] = first_item.object.name
+                except Exception:
+                    pass
+            elif name_source == "MATERIAL":
+                try:
+                    for item in getattr(self.bake_group, "objects", []):
+                        obj = getattr(item, "object", None)
+                        if obj and getattr(obj, "material_slots", None):
+                            for slot in obj.material_slots:
+                                if slot and slot.material:
+                                    extra["material"] = slot.material.name
+                                    break
+                        if "material" in extra:
+                            break
+                except Exception:
+                    pass
+
+            # Safely obtain suffix from map
+            try:
+                suffix = (getattr(map, "suffix", None) or getattr(map, "type", "") or "").strip()
+            except Exception:
+                try:
+                    suffix = str(getattr(map, "type", "")).strip()
+                except Exception:
+                    suffix = ""
+
+            try:
+                name = self.bake_settings.build_filename(
+                    bpy.context,
+                    bake_group_name=self.bake_group.name.strip(),
+                    map_suffix=suffix,
+                    extra_tokens=extra or None,
+                )
+            except Exception:
+                name = f"{self.bake_group.name.strip()}_{suffix}"
+
             if self.bake_settings.use_auto_udim and len(self.udims) > 1:
-                name = f"{map.name}.<UDIM>"
+                name = f"{name}.<UDIM>"
+
+            try:
+                print(f"QB_DEBUG save_map: bake_path='{self.bake_path}', name='{name}', suffix='{suffix}', extra={extra}, format='{self.file_format}'")
+                sys.stdout.flush()
+            except Exception:
+                pass
 
             Image.save_image(image=image, path=self.bake_path, name=name)
 
@@ -2023,6 +2075,12 @@ class Bake(Udim, Map):
 
         if self.bake_settings.use_auto_udim and len(self.udims) > 1:
             name += ".<UDIM>"
+
+        try:
+            print(f"QB_DEBUG save_map_image: path='{path}', name='{name}', suffix='{suffix}', extra={extra}, format='{self.file_format}'")
+            sys.stdout.flush()
+        except Exception:
+            pass
 
         filepath = Image.save_image_as(
             image,

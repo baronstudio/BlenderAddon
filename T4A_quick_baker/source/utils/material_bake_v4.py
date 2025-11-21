@@ -1565,7 +1565,53 @@ class Bake(Udim, Map):
             image = bake_operation(context, map)
 
         if image:
-            Image.save_image(image=image, path=self.bake_path, name=map.name)
+            # Build filename using centralized naming logic to match UI preview
+            # Build extra tokens including material and possibly object
+            extra = {"material": self.active_material.material.name.strip()}
+            try:
+                name_source = getattr(self.bake_settings, "naming_name_source", "BAKEGROUP")
+            except Exception:
+                name_source = "BAKEGROUP"
+            if name_source == "OBJECT":
+                # try to find an object that uses this material
+                obj_name = None
+                for obj in bpy.data.objects:
+                    if obj.type == "MESH":
+                        for slot in getattr(obj, "material_slots", []):
+                            if slot and slot.material is self.active_material.material:
+                                obj_name = obj.name
+                                break
+                        if obj_name:
+                            break
+                if obj_name:
+                    extra["object"] = obj_name
+
+            # Safely obtain suffix from map
+            try:
+                suffix = (getattr(map, "suffix", None) or getattr(map, "type", "") or "").strip()
+            except Exception:
+                try:
+                    suffix = str(getattr(map, "type", "")).strip()
+                except Exception:
+                    suffix = ""
+
+            try:
+                name = self.bake_settings.build_filename(
+                    bpy.context,
+                    bake_group_name=self.active_material.material.name.strip(),
+                    map_suffix=suffix,
+                    extra_tokens=extra,
+                )
+            except Exception:
+                name = f"{self.active_material.material.name.strip()}_{suffix}"
+
+            try:
+                print(f"QB_DEBUG material_bake.save_map: bake_path='{self.bake_path}', name='{name}', suffix='{suffix}', extra={extra}, format='{self.file_format}'")
+                sys.stdout.flush()
+            except Exception:
+                pass
+
+            Image.save_image(image=image, path=self.bake_path, name=name)
 
             print("QB: Baked Map")
             sys.stdout.flush()
@@ -1733,6 +1779,12 @@ class Bake(Udim, Map):
         except Exception:
             # Fallback: simple default name to avoid chained .replace usage
             name = f"{self.active_material.material.name.strip()}_{suffix}"
+
+        try:
+            print(f"QB_DEBUG material_bake.save_map_image: path='{path}', name='{name}', suffix='{suffix}', extra={extra}, format='{self.file_format}'")
+            sys.stdout.flush()
+        except Exception:
+            pass
 
         filepath = Image.save_image_as(
             image,

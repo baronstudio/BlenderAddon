@@ -1749,13 +1749,18 @@ class Bake(Udim, Map):
             map (bpy.types.PointerProperty): The type of the map.
             map_name (str): The name of the map.
         """
-        batch_name = (
-            self.bake_settings.batch_name.replace("$name", self.bake_group.name.strip())
-            .replace("$size", self.size_name)
-            .replace("$type", map.suffix.strip())
-            if self.bake_settings.batch_name
-            else f"{self.bake_group.name.strip()}_{map.suffix.strip()}"
-        )
+        try:
+            batch_name = self.bake_settings.build_filename(
+                bpy.context, bake_group_name=self.bake_group.name.strip(), map_suffix=map.suffix.strip()
+            )
+        except Exception:
+            batch_name = (
+                self.bake_settings.batch_name.replace("$name", self.bake_group.name.strip())
+                .replace("$size", self.size_name)
+                .replace("$type", map.suffix.strip())
+                if getattr(self.bake_settings, "batch_name", None)
+                else f"{self.bake_group.name.strip()}_{map.suffix.strip()}"
+            )
 
         source = "TILED" if self.bake_settings.use_auto_udim and len(self.udims) > 1 else "FILE"
         color_space = "sRGB" if image.alpha_mode == "CHANNEL_PACKED" else image.colorspace_settings.name
@@ -1826,13 +1831,18 @@ class Bake(Udim, Map):
                 if self.bake_settings.use_sub_folder:
                     path = os.path.join(path, self.bake_group.name)
 
-        name = (
-            self.bake_settings.batch_name.replace("$name", self.bake_group.name.strip())
-            .replace("$size", self.size_name)
-            .replace("$type", map.suffix.strip())
-            if self.bake_settings.batch_name
-            else f"{self.bake_group.name.strip()}_{map.suffix.strip()}"
-        )
+        try:
+            name = self.bake_settings.build_filename(
+                bpy.context, bake_group_name=self.bake_group.name.strip(), map_suffix=map.suffix.strip()
+            )
+        except Exception:
+            name = (
+                self.bake_settings.batch_name.replace("$name", self.bake_group.name.strip())
+                .replace("$size", self.size_name)
+                .replace("$type", map.suffix.strip())
+                if getattr(self.bake_settings, "batch_name", None)
+                else f"{self.bake_group.name.strip()}_{map.suffix.strip()}"
+            )
         if self.bake_settings.use_auto_udim and len(self.udims) > 1:
             name += ".<UDIM>"
 

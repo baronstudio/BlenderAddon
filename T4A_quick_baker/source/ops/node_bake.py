@@ -136,12 +136,20 @@ class QBAKER_OT_node_bake(Operator, Bake):
             else bpy.types.UILayout.enum_item_name(self.node_baker, "size", self.node_baker.size)
         )
 
-        name = (
-            self.node_baker.batch_name.replace("$node", node.name)
-            .replace("$socket", output.name)
-            .replace("$uvmap", self.node_baker.uv_map)
-            .replace("$size", size)
-        )
+        try:
+            name = self.node_baker.build_filename(
+                context,
+                bake_group_name=node.name,
+                map_suffix=output.name,
+                extra_tokens={"socket": output.name, "uvmap": self.node_baker.uv_map},
+            )
+        except Exception:
+            name = (
+                self.node_baker.batch_name.replace("$node", node.name)
+                .replace("$socket", output.name)
+                .replace("$uvmap", self.node_baker.uv_map)
+                .replace("$size", size)
+            )
 
         name = str(name)
         image = self.create_image(context, name, non_color)

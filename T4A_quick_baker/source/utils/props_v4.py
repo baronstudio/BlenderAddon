@@ -3029,6 +3029,18 @@ class QBAKER_PG_bake(PropertyGroup):
         default=False,
     )
 
+    naming_include_name: BoolProperty(
+        name="Include $name",
+        description="Inclure le nom du Bakegroup ($name) dans le nom de fichier",
+        default=True,
+    )
+
+    naming_include_size: BoolProperty(
+        name="Include $size",
+        description="Inclure la taille ($size) dans le nom de fichier",
+        default=True,
+    )
+
     naming_include_time: BoolProperty(
         name="Include Time",
         description="Insère l'heure actuelle (HHMMSS)",
@@ -3256,7 +3268,7 @@ class QBAKER_PG_bake(PropertyGroup):
         default=True,
     )
 
-    def build_filename(self, context, bake_group_name: str, map_suffix: str):
+    def build_filename(self, context, bake_group_name: str, map_suffix: str, extra_tokens: dict = None):
         """
         Construire le nom de fichier (sans extension ni UDIM).
         Les éléments de pré-nommage (prefix/date/time/blend/collection/custom suffix)
@@ -3308,6 +3320,13 @@ class QBAKER_PG_bake(PropertyGroup):
         # Render existing batch_name template (it already handles $name, $size, $type etc.)
         template = self.batch_name or "$name_$size_$type"
 
+        # Respect toggles: allow user to disable automatic inclusion of $name and/or $size.
+        # We remove tokens from the template before rendering (they will be replaced by empty string).
+        if not getattr(self, "naming_include_name", True):
+            template = template.replace("$name", "")
+        if not getattr(self, "naming_include_size", True):
+            template = template.replace("$size", "")
+
         # Mapping for tokens we support
         mapping = {
             "name": bake_group_name,
@@ -3320,6 +3339,11 @@ class QBAKER_PG_bake(PropertyGroup):
             "width": str(getattr(self, "width", "")),
             "height": str(getattr(self, "height", "")),
         }
+
+        # Merge any extra tokens provided by the caller (eg. material, node, socket)
+        if extra_tokens:
+            # ensure all keys are strings
+            mapping.update({str(k): str(v) for k, v in extra_tokens.items()})
 
         # Replace tokens like $name, $size, $type, $format, etc.
         rendered = template
@@ -3413,6 +3437,11 @@ class QBAKER_PG_bake(PropertyGroup):
         row = box.row(align=True)
         row.prop(self, "naming_include_date", text="Date")
         row.prop(self, "naming_include_time", text="Time")
+
+        # Allow toggling inclusion of $name and $size tokens
+        row = box.row(align=True)
+        row.prop(self, "naming_include_name", text="Include $name")
+        row.prop(self, "naming_include_size", text="Include $size")
 
         row = box.row(align=True)
         row.prop(self, "naming_include_blendname", text="Blend name")
@@ -4419,6 +4448,41 @@ class QBAKER_PG_node_baker(PropertyGroup):
         description="Name the maps with additional info\n\n$node     - Name of the node\n$size       - Size of the texture\n$socket  - Name of the node socket\n$uvmap  - Name of the selected uv map",
         default="$node_$size_$socket",
     )
+
+    def build_filename(self, context, bake_group_name: str, map_suffix: str, extra_tokens: dict = None):
+        """
+        Build filename for node baker templates. Supports tokens: $node, $size, $socket, $uvmap.
+        Returns a normalized filename base (no UDIM/extension).
+        """
+        template = self.batch_name or "$node_$size_$socket"
+
+        size_str = (
+            f"{self.width}x{self.height}" if getattr(self, "size", "") == "CUSTOM" else getattr(self, "size", "")
+        )
+
+        mapping = {
+            "node": bake_group_name,
+            "size": size_str,
+            "socket": str(extra_tokens.get("socket", "")) if extra_tokens else "",
+            "uvmap": str(extra_tokens.get("uvmap", "")) if extra_tokens else "",
+        }
+
+        if extra_tokens:
+            mapping.update({str(k): str(v) for k, v in extra_tokens.items()})
+
+        rendered = template
+        for key, val in mapping.items():
+            rendered = rendered.replace(f"${key}", str(val))
+
+        name = rendered
+        if map_suffix and not name.endswith(str(map_suffix)):
+            name = f"{name}_{map_suffix}"
+
+        name = name.strip().replace(" ", "_")
+        while "__" in name:
+            name = name.replace("__", "_")
+
+        return name
 
     use_auto_udim: BoolProperty(
         name="Auto UDIM",

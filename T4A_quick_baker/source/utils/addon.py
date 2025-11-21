@@ -8,6 +8,18 @@ import bpy
 from ... import __package__ as package
 from ... import bl_info
 
+# Try to import tomllib (Python 3.11+) or fallback to external 'toml' if available.
+try:
+    import tomllib as _toml
+    _TOML_BINARY = True
+except Exception:
+    try:
+        import toml as _toml
+        _TOML_BINARY = False
+    except Exception:
+        _toml = None
+        _TOML_BINARY = False
+
 
 def addon_path() -> str:
     """Get the path of the addon directory.
@@ -83,5 +95,50 @@ def timer(func: Callable) -> Callable:
     return wrapper
 
 
-version = bl_info["version"]
-version_str = ".".join(map(str, bl_info["version"]))
+def _get_manifest_version():
+    """Try to read `blender_manifest.toml` and return its `version` value.
+
+    Returns:
+        The parsed version (str or sequence) or None if not available/parsable.
+    """
+    if _toml is None:
+        return None
+
+    manifest_path = os.path.join(addon_path(), "blender_manifest.toml")
+    if not os.path.exists(manifest_path):
+        return None
+
+    try:
+        if _TOML_BINARY:
+            with open(manifest_path, "rb") as f:
+                data = _toml.load(f)
+        else:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                data = _toml.load(f)
+        return data.get("version")
+    except Exception:
+        return None
+
+
+# Prefer the manifest version when available, otherwise fall back to bl_info
+_manifest_version = _get_manifest_version()
+if _manifest_version:
+    # If manifest gives a sequence like [2,9,5]
+    if isinstance(_manifest_version, (list, tuple)):
+        try:
+            version = tuple(int(x) for x in _manifest_version)
+            version_str = ".".join(map(str, version))
+        except Exception:
+            # keep raw values as string fallback
+            version = bl_info.get("version", (0, 0, 0))
+            version_str = ".".join(map(str, version))
+    else:
+        # manifest version is likely a string like "2.9.5"
+        version_str = str(_manifest_version)
+        try:
+            version = tuple(int(x) for x in version_str.split("."))
+        except Exception:
+            version = bl_info.get("version", (0, 0, 0))
+else:
+    version = bl_info["version"]
+    version_str = ".".join(map(str, bl_info["version"]))

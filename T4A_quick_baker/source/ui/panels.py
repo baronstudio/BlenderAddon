@@ -10,7 +10,7 @@ from ..utils.icon import icons
 class VIEW_3D_Panel:
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Q-Baker"
+    bl_category = "T4AQuick_Baker"
 
     @classmethod
     def poll(cls, context):
@@ -1271,14 +1271,9 @@ class QBAKER_PT_help:
         col = layout.column()
         if version >= (1, 0, 1):
             col.operator("qbaker.changelog", icon="RECOVER_LAST")
-        col.operator("wm.url_open", text="Documentation", icon="HELP").url = "https://b3dhub.github.io/quick-baker-docs"
-        col.operator("wm.url_open", text="Report a Bug", icon="URL").url = "https://discord.gg/sdnHHZpWbT"
-        col.operator(
-            "wm.url_open", text="Superhive", icon_value=icons["SUPERHIVE"]
-        ).url = "https://superhivemarket.com/products/quick-baker"
-        col.operator(
-            "wm.url_open", text="Gumroad", icon_value=icons["GUMROAD"]
-        ).url = "https://b3dhub.gumroad.com/l/quick-baker"
+        col.operator("wm.url_open", text="Documentation", icon="HELP").url = "https://github.com/baronstudio/BlenderAddon/tree/master/T4A_quick_baker"
+        
+        
 
 
 class QBAKER_PT_view3d_help(Panel, VIEW_3D_Panel, QBAKER_PT_help):

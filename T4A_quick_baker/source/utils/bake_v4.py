@@ -1900,7 +1900,8 @@ class Bake(Udim, Map):
             if path := self.bake_settings.folders[self.bake_settings.folder_index].path:
                 if self.bake_settings.use_sub_folder:
                     path = os.path.join(path, self.bake_group.name)
-
+        ## Create the name of the image
+        ## modif by jbb
         name = (
             self.bake_settings.batch_name.replace("$name", self.bake_group.name.strip())
             .replace("$size", self.size_name)

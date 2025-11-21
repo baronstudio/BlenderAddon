@@ -18,6 +18,7 @@ class T4A_PT_thumbnail_panel(bpy.types.Panel):
         row.prop(props, "resolution_x")
         row.prop(props, "resolution_y")
         col.prop(props, "jpeg_quality")
+        col.prop(props, "filename_suffix")
         col.prop(props, "use_batch")
 
         col.separator()

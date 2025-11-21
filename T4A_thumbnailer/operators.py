@@ -44,8 +44,10 @@ class T4A_OT_thumbnail_render_active(bpy.types.Operator):
             if hasattr(obj.data, 'materials') and len(obj.data.materials) > 0:
                 mat = obj.data.materials[0]
 
-        name = mat.name if mat is not None else obj.name
-        filename = os.path.join(out_folder, f"{name}.jpg")
+        # build filename with optional suffix (placed before extension)
+        suffix = props.filename_suffix if hasattr(props, 'filename_suffix') else ""
+        base_name = mat.name if mat is not None else obj.name
+        filename = os.path.join(out_folder, f"{base_name}{suffix}.jpg")
 
         # backup render settings
         rs = scene.render
@@ -131,8 +133,9 @@ class T4A_OT_thumbnail_batch(bpy.types.Operator):
                 # assign material to all slots (simple approach)
                 for i in range(len(obj.data.materials)):
                     obj.data.materials[i] = mat
-
-                filename = os.path.join(out_folder, f"{mat.name}.jpg")
+                # filename with suffix before extension
+                suffix = props.filename_suffix if hasattr(props, 'filename_suffix') else ""
+                filename = os.path.join(out_folder, f"{mat.name}{suffix}.jpg")
                 rs.filepath = filename
                 bpy.ops.render.render(write_still=True, use_viewport=False)
 

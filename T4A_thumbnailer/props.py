@@ -33,3 +33,8 @@ class T4A_Props(bpy.types.PropertyGroup):
         default=True,
         description="Si vrai, appliquera tous les matériaux assignés à l'objet sélectionné"
     )
+    filename_suffix: bpy.props.StringProperty(
+        name="Suffixe fichier",
+        description="Suffixe ajouté au nom du fichier avant l'extension (ex: _thumb)",
+        default="_thumb"
+    )

@@ -21,14 +21,18 @@ class ExportUVLayout:
         self.size = int(map.wireframe.size)
         self.size_name = bpy.types.UILayout.enum_item_name(map.wireframe, "size", map.wireframe.size)
 
-        if bake_group.bake.batch_name:
-            name = (
-                bake_group.bake.batch_name.replace("$name", bake_group.name.strip())
-                .replace("$size", self.size_name)
-                .replace("$type", map.wireframe.suffix.strip())
-            )
-        else:
-            name = f"{bake_group.name.strip()}_{map.wireframe.suffix.strip()}"
+        # Use centralized filename builder on the bake group (fallback to legacy template)
+        try:
+            name = bake_group.bake.build_filename(bpy.context, bake_group_name=bake_group.name.strip(), map_suffix=map.wireframe.suffix.strip())
+        except Exception:
+            if bake_group.bake.batch_name:
+                name = (
+                    bake_group.bake.batch_name.replace("$name", bake_group.name.strip())
+                    .replace("$size", self.size_name)
+                    .replace("$type", map.wireframe.suffix.strip())
+                )
+            else:
+                name = f"{bake_group.name.strip()}_{map.wireframe.suffix.strip()}"
 
         if path := self.bake_settings.folders[self.bake_settings.folder_index].path:
             if self.bake_settings.use_sub_folder:

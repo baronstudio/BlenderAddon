@@ -1,4 +1,5 @@
 import os
+import datetime
 
 import bpy
 from bpy.props import (
@@ -3009,6 +3010,49 @@ class QBAKER_PG_bake(PropertyGroup):
         default="$name_$size_$type",
     )
 
+    # --- Filename customization properties ---
+    naming_use_custom_prefix: BoolProperty(
+        name="Use Prefix",
+        description="Ajouter un préfixe personnalisé avant le nom généré",
+        default=False,
+    )
+
+    naming_custom_prefix: StringProperty(
+        name="Custom Prefix",
+        description="Texte ajouté au début du nom (avant les autres éléments)",
+        default="",
+    )
+
+    naming_include_date: BoolProperty(
+        name="Include Date",
+        description="Insère la date actuelle (YYYYMMDD)",
+        default=False,
+    )
+
+    naming_include_time: BoolProperty(
+        name="Include Time",
+        description="Insère l'heure actuelle (HHMMSS)",
+        default=False,
+    )
+
+    naming_include_blendname: BoolProperty(
+        name="Include .blend name",
+        description="Insère le nom du fichier .blend (sans extension)",
+        default=False,
+    )
+
+    naming_include_collection: BoolProperty(
+        name="Include Active Collection",
+        description="Insère le nom de la collection active (si disponible)",
+        default=False,
+    )
+
+    naming_custom_suffix: StringProperty(
+        name="Custom Suffix",
+        description="Texte ajouté avant le suffix existant (optionnel). Ne remplace pas le suffix géré par la map.",
+        default="",
+    )
+
     use_auto_udim: BoolProperty(
         name="Auto UDIM",
         description="Automatically create UDIM textures based on UV layout",
@@ -3212,6 +3256,95 @@ class QBAKER_PG_bake(PropertyGroup):
         default=True,
     )
 
+    def build_filename(self, context, bake_group_name: str, map_suffix: str):
+        """
+        Construire le nom de fichier (sans extension ni UDIM).
+        Les éléments de pré-nommage (prefix/date/time/blend/collection/custom suffix)
+        sont placés avant la template `batch_name`. Le suffix de la map (`map_suffix`)
+        est conservé et placé à la fin si nécessaire.
+        """
+        parts = []
+
+        # custom prefix
+        if getattr(self, "naming_use_custom_prefix", False) and self.naming_custom_prefix:
+            parts.append(self.naming_custom_prefix.strip())
+
+        # date/time
+        now = datetime.datetime.now()
+        if getattr(self, "naming_include_date", False):
+            parts.append(now.strftime("%Y%m%d"))
+        if getattr(self, "naming_include_time", False):
+            parts.append(now.strftime("%H%M%S"))
+
+        # blend name
+        if getattr(self, "naming_include_blendname", False):
+            blend_path = bpy.data.filepath
+            if blend_path:
+                parts.append(os.path.splitext(os.path.basename(blend_path))[0])
+            else:
+                parts.append("untitled")
+
+        # active collection
+        if getattr(self, "naming_include_collection", False):
+            col_name = None
+            try:
+                col = context.collection
+                if col:
+                    col_name = col.name
+            except Exception:
+                col_name = None
+            if not col_name:
+                try:
+                    col_name = context.view_layer.active_layer_collection.collection.name
+                except Exception:
+                    col_name = None
+            if col_name:
+                parts.append(col_name)
+
+        # custom suffix (placed before the map's suffix)
+        if self.naming_custom_suffix:
+            parts.append(self.naming_custom_suffix.strip())
+
+        # Render existing batch_name template (it already handles $name, $size, $type etc.)
+        template = self.batch_name or "$name_$size_$type"
+
+        # Mapping for tokens we support
+        mapping = {
+            "name": bake_group_name,
+            "size": (f"{self.width}x{self.height}" if self.size == "CUSTOM" else self.size),
+            "type": map_suffix,
+            "format": getattr(self, "format", ""),
+            "aa": getattr(self, "anti_aliasing", ""),
+            "margin": str(getattr(self, "margin", "")),
+            "processes": str(getattr(self, "processes", "")),
+            "width": str(getattr(self, "width", "")),
+            "height": str(getattr(self, "height", "")),
+        }
+
+        # Replace tokens like $name, $size, $type, $format, etc.
+        rendered = template
+        for key, val in mapping.items():
+            rendered = rendered.replace(f"${key}", str(val))
+
+        # Combine prefix parts then the rendered template.
+        prefix_part = "_".join([p for p in parts if p])
+        if prefix_part:
+            name = f"{prefix_part}_{rendered}"
+        else:
+            name = rendered
+
+        # Ensure suffix presence: if map_suffix not already inside name (end), append
+        if map_suffix and not name.endswith(str(map_suffix)):
+            name = f"{name}_{map_suffix}"
+
+        # Normalize: replace spaces by underscore and remove duplicate underscores
+        name = name.strip()
+        name = name.replace(" ", "_")
+        while "__" in name:
+            name = name.replace("__", "_")
+
+        return name
+
     def draw_path(self, context, layout):
         row = layout.row()
         row.template_list(
@@ -3268,6 +3401,36 @@ class QBAKER_PG_bake(PropertyGroup):
         col.prop(self, "margin_type")
         col.prop(self, "margin", text="Margin Size")
         col.prop(self, "processes")
+
+        # Filename options UI
+        box = layout.box()
+        box.label(text="Filename Options")
+        row = box.row(align=True)
+        row.prop(self, "naming_use_custom_prefix", text="Prefix")
+        if self.naming_use_custom_prefix:
+            box.prop(self, "naming_custom_prefix", text="")
+
+        row = box.row(align=True)
+        row.prop(self, "naming_include_date", text="Date")
+        row.prop(self, "naming_include_time", text="Time")
+
+        row = box.row(align=True)
+        row.prop(self, "naming_include_blendname", text="Blend name")
+        row.prop(self, "naming_include_collection", text="Collection")
+
+        box.prop(self, "naming_custom_suffix", text="Custom suffix before map suffix")
+
+        # Preview (use example bake group name and $type as placeholder for map suffix)
+        try:
+            bake_group_name = "BakeGroup"
+            if hasattr(context.scene, 'qbaker') and context.scene.qbaker.bake_groups:
+                bg_index = context.scene.qbaker.active_bake_group_index
+                if context.scene.qbaker.bake_groups:
+                    bake_group_name = context.scene.qbaker.bake_groups[bg_index].name
+        except Exception:
+            bake_group_name = "BakeGroup"
+        preview_name = self.build_filename(context, bake_group_name=bake_group_name, map_suffix="$type")
+        box.label(text=f"Preview: {preview_name}")
 
         col = layout.column(heading="Post Bake", align=True)
         col.use_property_split = True

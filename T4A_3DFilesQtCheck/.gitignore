@@ -47,6 +47,7 @@ Thumbs.db
 # Sensitive files (uncomment if you keep keys locally)
 # *.json
 # secrets.yaml
+.credentials/
 
 # Local editor/session files
 *.swp

@@ -5,7 +5,7 @@ class T4A_PT_PROD_CheckList(bpy.types.Panel):
     bl_idname = "T4A_PT_PROD_check_list"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'T4A'
+    bl_category = 'T4A_3DFilesQtCheck'
 
     def draw(self, context):
         layout = self.layout

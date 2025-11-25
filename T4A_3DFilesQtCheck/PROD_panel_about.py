@@ -5,7 +5,8 @@ class T4A_PT_PROD_About(bpy.types.Panel):
     bl_idname = "T4A_PT_PROD_about"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'T4A'
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_category = 'T4A_3DFilesQtCheck'
 
     def draw(self, context):
         layout = self.layout

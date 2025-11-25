@@ -31,12 +31,20 @@ def register():
     for fullname, shortname in _iter_package_modules():
         try:
             module = importlib.import_module(fullname)
-            _loaded_modules.append(module)
-            if hasattr(module, "register"):
-                module.register()
         except Exception:
             print(f"[T4A Autoload] Erreur lors de l'import de {fullname}")
             traceback.print_exc()
+            continue
+
+        # Only consider the module "loaded" if its register() call succeeds.
+        try:
+            if hasattr(module, "register"):
+                module.register()
+            _loaded_modules.append(module)
+        except Exception:
+            print(f"[T4A Autoload] Erreur lors de l'enregistrement de {fullname}")
+            traceback.print_exc()
+            # don't append module to _loaded_modules so unregister won't be called on it
 
 
 def unregister():

@@ -1,0 +1,52 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env/
+
+# Distribution / build
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+*.egg
+.eggs/
+
+# Testing / coverage
+.pytest_cache/
+.mypy_cache/
+
+# Blender temporary / backup files
+*.blend1
+*.blend2
+*.blend@*
+*.blend_thumb
+*__backup.blend
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Optional: ignore installed site-packages if you vendor them
+# site-packages/
+
+# Sensitive files (uncomment if you keep keys locally)
+# *.json
+# secrets.yaml
+
+# Local editor/session files
+*.swp

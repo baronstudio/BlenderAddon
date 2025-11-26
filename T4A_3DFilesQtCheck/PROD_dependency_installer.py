@@ -8,6 +8,7 @@ import sys
 import subprocess
 import traceback
 import logging
+import importlib
 import bpy
 
 logger = logging.getLogger('T4A.DependencyInstaller')
@@ -67,18 +68,34 @@ class T4A_OT_InstallDependencies(bpy.types.Operator):
 
             if proc.returncode == 0:
                 self.report({'INFO'}, f"Packages installés: {', '.join(pkgs)}")
-                print(f"[T4A Installer] OK: {', '.join(pkgs)}\n{out}")
+                logger.info("[T4A Installer] OK: %s\n%s", ', '.join(pkgs), out)
+                # Try to reload key addon modules so they see the newly installed packages
+                try:
+                    pkg = __package__ or 'T4A_3DFilesQtCheck'
+                    to_reload = [f"{pkg}.PROD_gemini", f"{pkg}.PROD_Files_manager", pkg]
+                    for name in to_reload:
+                        try:
+                            if name in sys.modules:
+                                importlib.reload(sys.modules[name])
+                                logger.debug("[T4A Installer] Module rechargé: %s", name)
+                            else:
+                                importlib.import_module(name)
+                                logger.debug("[T4A Installer] Module importé: %s", name)
+                        except Exception as e:
+                            logger.error("[T4A Installer] Échec reload/import %s: %s", name, e)
+                except Exception as e:
+                    logger.error('[T4A Installer] Erreur lors du rechargement des modules: %s', e)
                 return {'FINISHED'}
             else:
                 tb = f"pip failed (rc={proc.returncode})\n{out}\n{err}"
                 logger.error(tb)
                 self.report({'ERROR'}, f"Échec installation: voir console (rc={proc.returncode})")
-                print('[T4A Installer] ERREUR:', tb)
+                logger.error('[T4A Installer] ERREUR: %s', tb)
                 return {'CANCELLED'}
         except Exception:
             tb = traceback.format_exc()
             logger.error('Installation exception: %s', tb)
-            print('[T4A Installer] Exception:', tb)
+            logger.error('[T4A Installer] Exception: %s', tb)
             self.report({'ERROR'}, 'Exception lors de l\'installation — voir console')
             return {'CANCELLED'}
 
@@ -86,29 +103,29 @@ class T4A_OT_InstallDependencies(bpy.types.Operator):
 def register():
     try:
         bpy.utils.register_class(T4A_OT_InstallDependencies)
-        print('[T4A Register] Registered T4A_OT_InstallDependencies')
+        logger.debug('[T4A Register] Registered T4A_OT_InstallDependencies')
     except ValueError as ve:
         msg = str(ve)
         if 'already registered' in msg:
-            print('[T4A Register] Installer already registered - skipping')
+            logger.debug('[T4A Register] Installer already registered - skipping')
         else:
-            print('[T4A Register] ValueError registering installer:', msg)
+            logger.debug('[T4A Register] ValueError registering installer: %s', msg)
     except Exception as e:
-        print('[T4A Register] Failed to register T4A_OT_InstallDependencies:', e)
+        logger.debug('[T4A Register] Failed to register T4A_OT_InstallDependencies: %s', e)
 
 
 def unregister():
     try:
         bpy.utils.unregister_class(T4A_OT_InstallDependencies)
-        print('[T4A Unregister] Unregistered T4A_OT_InstallDependencies')
+        logger.debug('[T4A Unregister] Unregistered T4A_OT_InstallDependencies')
     except ValueError as ve:
         msg = str(ve)
         if 'not registered' in msg or 'is not registered' in msg:
-            print('[T4A Unregister] Installer not registered - skipping')
+            logger.debug('[T4A Unregister] Installer not registered - skipping')
         else:
-            print('[T4A Unregister] ValueError unregistering installer:', msg)
+            logger.debug('[T4A Unregister] ValueError unregistering installer: %s', msg)
     except Exception as e:
-        print('[T4A Unregister] Failed to unregister T4A_OT_InstallDependencies:', e)
+        logger.debug('[T4A Unregister] Failed to unregister T4A_OT_InstallDependencies: %s', e)
 
 
 __all__ = ('T4A_OT_InstallDependencies',)

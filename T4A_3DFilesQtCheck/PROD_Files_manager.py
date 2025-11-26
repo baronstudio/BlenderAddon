@@ -2,8 +2,18 @@ import os
 import bpy
 import threading
 import time
+import json
+import logging
 
 from typing import List
+
+
+logger = logging.getLogger('T4A.FilesManager')
+if not logger.handlers:
+    h = logging.StreamHandler()
+    h.setFormatter(logging.Formatter('%(asctime)s | %(name)s | %(levelname)s | %(message)s'))
+    logger.addHandler(h)
+    logger.setLevel(logging.DEBUG)
 
 
 def _gather_files(path: str, exts: List[str]) -> List[str]:
@@ -51,7 +61,7 @@ def _import_file(filepath: str) -> bool:
             return False
         return True
     except Exception as e:
-        print(f"[T4A] Erreur d'import pour {filepath}: {e}")
+        logger.error("[T4A] Erreur d'import pour %s: %s", filepath, e)
         return False
 
 
@@ -313,12 +323,12 @@ class T4A_OT_ImportFileToCollection(bpy.types.Operator):
                         try:
                             # call operator to analyze file; it will log/store results
                             bpy.ops.t4a.analyze_text_file(filepath=candidate)
-                            print(f"[T4A] Analyse lancée pour: {candidate}")
+                            logger.info("[T4A] Analyse lancée pour: %s", candidate)
                         except Exception as e:
-                            print(f"[T4A] Échec analyse pour {candidate}: {e}")
+                            logger.error("[T4A] Échec analyse pour %s: %s", candidate, e)
                         break
         except Exception as e:
-            print(f"[T4A] Recherche/analyse post-import échouée: {e}")
+            logger.error("[T4A] Recherche/analyse post-import échouée: %s", e)
 
         return {'FINISHED'}
 
@@ -350,11 +360,11 @@ class T4A_OT_TestGeminiConnection(bpy.types.Operator):
                 res = PROD_gemini.test_connection(api_key, model=model_name)
             else:
                 res = PROD_gemini.test_connection(api_key)
-            print('[T4A Gemini Test] result:', res)
+            logger.info('[T4A Gemini Test] result: %s', res)
             self.report({'INFO'}, 'Gemini test logged to console')
             return {'FINISHED'}
         except Exception as e:
-            print('[T4A Gemini Test] error:', e)
+            logger.error('[T4A Gemini Test] error: %s', e)
             self.report({'ERROR'}, f'Gemini test failed: {e}')
             return {'CANCELLED'}
 
@@ -413,6 +423,55 @@ class T4A_OT_AnalyzeTextFile(bpy.types.Operator):
                 api_key = os.environ.get('GOOGLE_API_KEY', '')
                 model_name = os.environ.get('MODEL_NAME', None)
 
+            # Ensure model list is fresh before using model_name: if cache expired, refresh synchronously
+            try:
+                TTL = 3600
+                now = time.time()
+                ts = float(getattr(prefs, 'model_list_ts', 0) or 0)
+                if now - ts >= TTL:
+                    # refresh synchronously using PROD_gemini.list_models
+                    try:
+                        from . import PROD_gemini
+                        res = PROD_gemini.list_models(api_key)
+                        if res.get('success'):
+                            detail = res.get('detail')
+                            names = []
+                            try:
+                                if isinstance(detail, dict):
+                                    for m in detail.get('models', []) or []:
+                                        n = m.get('name') if isinstance(m, dict) else str(m)
+                                        if n:
+                                            short = n.split('/')[-1]
+                                            names.append(short)
+                                if not names and isinstance(detail, list):
+                                    for x in detail:
+                                        names.append(str(x))
+                            except Exception:
+                                names = []
+                            if names:
+                                try:
+                                    prefs.model_list_json = json.dumps(names)
+                                    prefs.model_list_ts = time.time()
+                                    # if no model_name, set to first
+                                    try:
+                                        if not getattr(prefs, 'model_name', None):
+                                            prefs.model_name = names[0]
+                                    except Exception:
+                                        pass
+                                except Exception:
+                                    pass
+                    except Exception:
+                        # ignore refresh errors; we'll proceed with existing model_name
+                        pass
+                    # re-read model_name after refresh
+                    try:
+                        model_name = getattr(prefs, 'model_name', None)
+                    except Exception:
+                        pass
+            except Exception:
+                # ignore any unexpected errors in the freshness/refresh block
+                pass
+
             from . import PROD_gemini
 
             if model_name:
@@ -436,7 +495,7 @@ class T4A_OT_AnalyzeTextFile(bpy.types.Operator):
             except Exception:
                 pass
 
-            print('[T4A Analyze] result:', res)
+            logger.info('[T4A Analyze] result: %s', res)
             # If server returned 404, give a helpful report to the user
             status = res.get('status_code')
             if status == 404:
@@ -445,7 +504,7 @@ class T4A_OT_AnalyzeTextFile(bpy.types.Operator):
                 self.report({'INFO'}, 'Analyze request sent; result logged')
             return {'FINISHED'}
         except Exception as e:
-            print('[T4A Analyze] error', e)
+            logger.error('[T4A Analyze] error %s', e)
             self.report({'ERROR'}, f'Analyze failed: {e}')
             return {'CANCELLED'}
 
@@ -462,82 +521,94 @@ class T4A_OT_ListGeminiModels(bpy.types.Operator):
                 prefs = context.preferences.addons[PROD_Parameters.__package__].preferences
                 api_key = prefs.google_api_key
             except Exception:
+                prefs = None
                 api_key = os.environ.get('GOOGLE_API_KEY', '')
 
-            from . import PROD_gemini
+            if not api_key:
+                self.report({'ERROR'}, 'No API key provided')
+                return {'CANCELLED'}
+
             import json
+            import urllib.request
+            import urllib.error
 
-            TTL = 3600
+            # Use the v1beta models listing endpoint; ensure we use the API key from prefs
+            API_KEY = (api_key or '').strip()
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={API_KEY}"
 
-            # If cache still valid, skip
+            # Reset stored model list before fetching so UI sees a clean state
             try:
-                last_ts = float(getattr(prefs, 'model_list_ts', 0) or 0)
+                if prefs is not None:
+                    prefs.model_list_json = '[]'
+                    prefs.model_list_ts = 0.0
             except Exception:
-                last_ts = 0
+                pass
 
-            if time.time() - last_ts < TTL:
-                self.report({'INFO'}, "Liste modèles: cache valide")
-                return {'FINISHED'}
+            try:
+                logger.debug("Récupération de la liste des modèles...")
+                with urllib.request.urlopen(url) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    logger.debug("--- MODÈLES DISPONIBLES POUR VOTRE CLÉ ---")
+                    found_any = False
+                    seen = set()
+                    ordered = []
+                    for model in data.get('models', []):
+                        # Keep only models that support generateContent
+                        if "generateContent" in model.get('supportedGenerationMethods', []):
+                            raw_name = model.get('name', '')
+                            if not raw_name:
+                                continue
+                            # extract the last path segment after any '/'
+                            short_name = raw_name.split('/')[-1].strip()
+                            if not short_name:
+                                continue
+                            # avoid duplicates while preserving order
+                            if short_name in seen:
+                                continue
+                            seen.add(short_name)
+                            ordered.append(short_name)
+                            logger.debug("Nom à utiliser : %s", short_name)
+                            found_any = True
+                    logger.debug("------------------------------------------")
 
-            # Run the network request in a background thread and update prefs in main thread via timer
-            def worker():
-                res = PROD_gemini.list_models(api_key)
-                print('[T4A List Models] result:', res)
-
-                def updater():
-                    try:
+                    if not found_any:
+                        logger.debug("Aucun modèle compatible 'generateContent' trouvé.")
+                    else:
+                        # store results into addon preferences so EnumProperty updates
                         try:
-                            prefs_inner = context.preferences.addons[PROD_Parameters.__package__].preferences
-                        except Exception:
-                            print('[T4A List Models] could not access prefs to save results')
-                            return None
-                        if res.get('success'):
-                            detail = res.get('detail')
-                            names = []
-                            try:
-                                if isinstance(detail, dict):
-                                    for m in detail.get('models', []) or []:
-                                        n = m.get('name') if isinstance(m, dict) else str(m)
-                                        if n:
-                                            names.append(n)
-                                if not names and isinstance(detail, list):
-                                    for x in detail:
-                                        names.append(str(x))
-                            except Exception:
-                                names = []
-
-                            if names:
-                                prefs_inner.model_list_json = json.dumps(names)
+                            if prefs is not None:
+                                import json as _json
+                                prefs.model_list_json = _json.dumps(ordered)
+                                prefs.model_list_ts = time.time()
+                                # Optionally set model_name if not set or not in list
                                 try:
-                                    prefs_inner.model_name = names[0]
+                                    cur = getattr(prefs, 'model_name', None)
+                                    if not cur and ordered:
+                                        prefs.model_name = ordered[0]
                                 except Exception:
                                     pass
-                                prefs_inner.model_list_ts = time.time()
-                                print('[T4A List Models] preferences updated with models')
-                            else:
-                                print('[T4A List Models] No model names found in API response; leaving preferences unchanged. Full response:', detail)
-                        else:
-                            print('[T4A List Models] Listing failed:', res)
-                    except Exception as e:
-                        print('[T4A List Models] updater error:', e)
-                    return None
+                        except Exception as e:
+                            logger.error('[T4A List Models] Failed to save model list to preferences: %s', e)
 
-                # schedule updater on main thread
+                self.report({'INFO'}, 'Liste modèles récupérée (voir console)')
+                return {'FINISHED'}
+            except urllib.error.HTTPError as e:
+                body = ''
                 try:
-                    bpy.app.timers.register(updater)
+                    body = e.read().decode('utf-8')
                 except Exception:
-                    # fallback: try to call updater directly (may be unsafe)
-                    try:
-                        updater()
-                    except Exception:
-                        print('[T4A List Models] Failed to schedule prefs update')
-
-            th = threading.Thread(target=worker, daemon=True)
-            th.start()
-            self.report({'INFO'}, 'Model listing started (background). Voir la console pour le résultat.')
-            return {'FINISHED'}
+                    pass
+                logger.error("Erreur HTTP : %s - %s", getattr(e, 'code', ''), getattr(e, 'reason', ''))
+                if body:
+                    logger.error(body)
+                self.report({'ERROR'}, f"HTTP Error {getattr(e, 'code', 'unknown')}")
+                return {'CANCELLED'}
+            except Exception as e:
+                logger.error('Erreur : %s', e)
+                self.report({'ERROR'}, f"Erreur: {e}")
+                return {'CANCELLED'}
         except Exception as e:
-            print('[T4A List Models] error:', e)
+            logger.error('[T4A List Models] error: %s', e)
             self.report({'ERROR'}, f'Listing failed: {e}')
             return {'CANCELLED'}
 
@@ -601,16 +672,16 @@ def register():
     for cls in classes:
         try:
             bpy.utils.register_class(cls)
-            print(f"[T4A Register] Registered {getattr(cls, '__name__', str(cls))}")
+            logger.debug("[T4A Register] Registered %s", getattr(cls, '__name__', str(cls)))
         except ValueError as ve:
             msg = str(ve)
             if 'already registered' in msg:
-                print(f"[T4A Register] Skipping already-registered {getattr(cls, '__name__', str(cls))}")
+                logger.debug("[T4A Register] Skipping already-registered %s", getattr(cls, '__name__', str(cls)))
             else:
-                print(f"[T4A Register] ValueError registering {getattr(cls, '__name__', str(cls))}: {msg}")
+                logger.debug("[T4A Register] ValueError registering %s: %s", getattr(cls, '__name__', str(cls)), msg)
                 traceback.print_exc()
         except Exception:
-            print(f"[T4A Register] Failed to register {getattr(cls, '__name__', str(cls))}")
+            logger.debug("[T4A Register] Failed to register %s", getattr(cls, '__name__', str(cls)))
             traceback.print_exc()
 
 
@@ -619,16 +690,16 @@ def unregister():
     for cls in reversed(classes):
         try:
             bpy.utils.unregister_class(cls)
-            print(f"[T4A Unregister] Unregistered {getattr(cls, '__name__', str(cls))}")
+            logger.debug("[T4A Unregister] Unregistered %s", getattr(cls, '__name__', str(cls)))
         except ValueError as ve:
             msg = str(ve)
             if 'not registered' in msg or 'is not registered' in msg:
-                print(f"[T4A Unregister] Skipping not-registered {getattr(cls, '__name__', str(cls))}")
+                logger.debug("[T4A Unregister] Skipping not-registered %s", getattr(cls, '__name__', str(cls)))
             else:
-                print(f"[T4A Unregister] ValueError unregistering {getattr(cls, '__name__', str(cls))}: {msg}")
+                logger.debug("[T4A Unregister] ValueError unregistering %s: %s", getattr(cls, '__name__', str(cls)), msg)
                 traceback.print_exc()
         except Exception:
-            print(f"[T4A Unregister] Failed to unregister {getattr(cls, '__name__', str(cls))}")
+            logger.debug("[T4A Unregister] Failed to unregister %s", getattr(cls, '__name__', str(cls)))
             traceback.print_exc()
 
 

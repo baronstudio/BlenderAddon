@@ -1,4 +1,5 @@
 import bpy
+import re
 
 class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
     bl_label = "Files Reviews"
@@ -63,7 +64,21 @@ class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
                     row.prop(item, 'expanded', icon='TRIA_DOWN' if item.expanded else 'TRIA_RIGHT', emboss=False, text=item.name)
                     if item.expanded:
                         sub = layout.box()
-                        sub.label(text=f"Dimensions: {item.dimensions}")
+                        try:
+                            dtext = (item.dimensions or '').strip()
+                            if not dtext:
+                                sub.label(text="Dimensions: (empty)")
+                            else:
+                                # split on semicolons or newlines and show one value per line
+                                parts = [p.strip() for p in re.split(r"[;\n]+", dtext) if p.strip()]
+                                if len(parts) > 1:
+                                    for p in parts:
+                                        sub.label(text=p)
+                                else:
+                                    # fallback single-line display
+                                    sub.label(text=dtext)
+                        except Exception:
+                            sub.label(text=f"Dimensions: {item.dimensions}")
             else:
                 layout.label(text="No dimension results available")
         except Exception:

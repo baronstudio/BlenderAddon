@@ -7,16 +7,42 @@ appelé depuis les préférences de l'addon (bouton "Installer dépendances").
 import sys
 import subprocess
 import traceback
-import logging
 import importlib
 import bpy
 
-logger = logging.getLogger('T4A.DependencyInstaller')
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)s | %(name)s | %(levelname)s | %(message)s'))
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
+
+def _t4a_print(level: str, msg: str, *args):
+    try:
+        if args:
+            print(f"[T4A] [{level}] " + (msg % args))
+        else:
+            print(f"[T4A] [{level}] {msg}")
+    except Exception:
+        if args:
+            parts = ' '.join(str(a) for a in args)
+            print(f"[T4A] [{level}] {msg} {parts}")
+        else:
+            print(f"[T4A] [{level}] {msg}")
+
+
+class _SimpleLogger:
+    def debug(self, msg, *args):
+        # Only print debug messages if debug mode is enabled
+        try:
+            from . import PROD_Parameters
+            if PROD_Parameters.is_debug_mode():
+                _t4a_print('DEBUG', msg, *args)
+        except Exception:
+            pass
+
+    def info(self, msg, *args):
+        _t4a_print('INFO', msg, *args)
+
+    def error(self, msg, *args):
+        _t4a_print('ERROR', msg, *args)
+
+
+logger = _SimpleLogger()
 
 
 class T4A_OT_InstallDependencies(bpy.types.Operator):
@@ -28,7 +54,7 @@ class T4A_OT_InstallDependencies(bpy.types.Operator):
     packages: bpy.props.StringProperty(
         name="Packages",
         description="Liste séparée par des virgules des paquets à installer (ex: PyPDF2)",
-        default="PyPDF2, requests, google-generativeai",
+        default="PyPDF2",
     )
 
     upgrade: bpy.props.BoolProperty(

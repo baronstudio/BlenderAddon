@@ -13,6 +13,7 @@ bl_info = {
 import bpy
 import os
 import json
+import time
 
 # Parameters module centralisé (doit être chargé en premier)
 from . import PROD_Parameters
@@ -24,9 +25,13 @@ from . import (
     PROD_panel_checklist,
     PROD_panel_files,
     PROD_panel_reviews,
+    PROD_panel_dimension_checker,
     PROD_mesh_analysis,
     PROD_image_analysis,
     PROD_Files_manager,
+    PROD_Utilitaire,
+    PROD_dimension_checker,
+    PROD_prompt_manager,
 )
 from . import PROD_dependency_installer
 
@@ -35,9 +40,13 @@ _MODULES = (
     PROD_mesh_analysis,
     PROD_image_analysis,
     PROD_Files_manager,
+    PROD_Utilitaire,
+    PROD_dimension_checker,
+    PROD_prompt_manager,
     PROD_panel_files,
     PROD_panel_checklist,
     PROD_panel_reviews,
+    PROD_panel_dimension_checker,
     PROD_panel_about,
     PROD_dependency_installer,
 )
@@ -60,16 +69,26 @@ def register():
                 mod.register()
         except Exception:
             print(f"[T4A] Erreur lors de l'enregistrement de {getattr(mod, '__name__', str(mod))}")
-            traceback.print_exc()
+            # Only print stack trace if debug mode is enabled
+            try:
+                if PROD_Parameters.is_debug_mode():
+                    traceback.print_exc()
+            except Exception:
+                pass
     try:
         bpy.utils.register_class(PROD_Parameters.T4A_AddonPreferences)
-    except Exception:
-        # ignore if already registered or bpy not available in test env
-        pass
+    except Exception as e:
+        # Show registration errors to help debug preferences UI issues
+        print(f"[T4A] Error registering T4A_AddonPreferences: {e}")
+        try:
+            import traceback
+            traceback.print_exc()
+        except Exception:
+            pass
 
     # Try to fetch available models at addon startup and persist them in prefs
     try:
-        addon_name = __package__ if __package__ else 'T4A_3DFilesQtCheck'
+        addon_name = 'T4A_3DFilesQtCheck'  # Must match bl_info["name"] and bl_idname
         prefs = bpy.context.preferences.addons[addon_name].preferences
         api_key = getattr(prefs, 'google_api_key', '') or os.environ.get('GOOGLE_API_KEY', '')
         try:
@@ -77,23 +96,31 @@ def register():
             res = PROD_gemini.list_models(api_key)
             if res.get('success'):
                 detail = res.get('detail')
-                names = []
-                if isinstance(detail, dict):
-                    for m in detail.get('models', []) or []:
-                        n = m.get('name') if isinstance(m, dict) else str(m)
-                        if n:
-                            names.append(n)
-                if not names and isinstance(detail, list):
-                    names = [str(x) for x in detail]
-                if names:
+                # detail is now a list of dicts with 'name' and 'compatible' keys
+                if detail and isinstance(detail, list):
                     try:
-                        prefs.model_list_json = json.dumps(names)
-                        # set selected model if empty
+                        # Store the full list (with compatibility info) in JSON format
+                        prefs.model_list_json = json.dumps(detail)
+                        prefs.model_list_ts = time.time()
+                        
+                        # Set selected model if empty - use first compatible model
                         if not getattr(prefs, 'model_name', None):
                             try:
-                                prefs.model_name = names[0]
+                                # Find first compatible model, fallback to first model
+                                first_compatible = None
+                                first_model = None
+                                for model_info in detail:
+                                    if isinstance(model_info, dict):
+                                        name = model_info.get('name', '')
+                                        if name:
+                                            if first_model is None:
+                                                first_model = name
+                                            if model_info.get('compatible', False) and first_compatible is None:
+                                                first_compatible = name
+                                
+                                prefs.model_name = first_compatible or first_model or 'models/gemini-2.5-flash-lite'
                             except Exception:
-                                pass
+                                prefs.model_name = 'models/gemini-2.5-flash-lite'
                     except Exception:
                         pass
         except Exception:
@@ -146,7 +173,12 @@ def unregister():
                 mod.unregister()
         except Exception:
             print(f"[T4A] Erreur lors de l'unregister de {getattr(mod, '__name__', str(mod))}")
-            traceback.print_exc()
+            # Only print stack trace if debug mode is enabled
+            try:
+                if PROD_Parameters.is_debug_mode():
+                    traceback.print_exc()
+            except Exception:
+                pass
     try:
         bpy.utils.unregister_class(PROD_Parameters.T4A_AddonPreferences)
     except Exception:

@@ -34,6 +34,17 @@ class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
                     scale = 'n/a'
             box.label(text=f"Unit System: {system}")
             box.label(text=f"Scale Length: {scale}")
+            
+            # Add warning if scale is not 1.0
+            if isinstance(scale, (int, float)) and scale != 1.0:
+                warning_box = box.box()
+                warning_box.alert = True
+                if scale > 1.0:
+                    warning_box.label(text=f"⚠ Échelle > 1.0: modèles {scale}x plus grands", icon='ERROR')
+                else:
+                    warning_box.label(text=f"⚠ Échelle < 1.0: modèles {scale}x plus petits", icon='ERROR')
+                warning_box.label(text="Les BoundingBoxes sont ajustées automatiquement")
+                
         except Exception:
             box.label(text="Scene unit info unavailable")
 

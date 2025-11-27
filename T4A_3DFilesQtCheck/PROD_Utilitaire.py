@@ -15,6 +15,66 @@ from typing import Optional, Tuple, Dict
 forceHelperBoxCreation: bool = True
 
 
+def get_scene_unit_scale() -> float:
+    """Get scene unit scale factor to convert Blender units to real-world units.
+    
+    Returns:
+        float: Scale factor (scene.unit_settings.scale_length)
+    """
+    try:
+        scene = bpy.context.scene
+        if scene and hasattr(scene, 'unit_settings'):
+            us = scene.unit_settings
+            scale = getattr(us, 'scale_length', 1.0)
+            return float(scale) if scale > 0 else 1.0
+        return 1.0
+    except Exception:
+        return 1.0
+
+
+def create_box_mesh(name: str, width: float, depth: float, height: float) -> bpy.types.Mesh:
+    """Crée un mesh de boîte avec les dimensions exactes spécifiées.
+    
+    Args:
+        name: Nom du mesh
+        width: Largeur (axe X)
+        depth: Profondeur (axe Y) 
+        height: Hauteur (axe Z)
+        
+    Returns:
+        bpy.types.Mesh: Le mesh créé avec la géométrie correcte
+    """
+    import bmesh
+    
+    # Créer un nouveau mesh
+    mesh = bpy.data.meshes.new(name)
+    
+    # Créer bmesh pour manipuler la géométrie
+    bm = bmesh.new()
+    
+    # Créer un cube avec les dimensions spécifiées
+    # bmesh.ops.create_cube crée un cube de taille 1x1x1 centré en (0,0,0)
+    bmesh.ops.create_cube(
+        bm,
+        size=1.0,  # Taille de base 1x1x1
+        calc_uvs=True
+    )
+    
+    # Redimensionner selon les dimensions demandées
+    # Scale directement aux dimensions finales
+    bmesh.ops.scale(
+        bm,
+        vec=(width, depth, height),  # Facteurs de scale pour avoir les bonnes dimensions
+        verts=bm.verts[:]
+    )
+    
+    # Appliquer le bmesh au mesh
+    bm.to_mesh(mesh)
+    bm.free()
+    
+    return mesh
+
+
 def parse_dimensions_string(s: str) -> Dict[str, Optional[float]]:
     """Parse une chaîne de dimensions et renvoie des valeurs en mètres.
 
@@ -56,6 +116,7 @@ def measure_collection_bbox(coll: bpy.types.Collection) -> Optional[Dict[str, ob
 
     Retourne dict {'width': w, 'height': h, 'depth': d, 'center': Vector} ou None si impossible.
     Convention: X -> width, Z -> height, Y -> depth.
+    Dimensions are converted to real-world units using scene scale.
     """
     try:
         
@@ -80,11 +141,23 @@ def measure_collection_bbox(coll: bpy.types.Collection) -> Optional[Dict[str, ob
         minx, maxx = min(xs), max(xs)
         miny, maxy = min(ys), max(ys)
         minz, maxz = min(zs), max(zs)
-        width = maxx - minx
-        depth = maxy - miny
-        height = maxz - minz
-        center = mathutils.Vector(((minx + maxx) / 2.0, (miny + maxy) / 2.0, (minz + maxz) / 2.0))
-        return {'width': width, 'height': height, 'depth': depth, 'center': center}
+        
+        # Get scene unit scale to convert Blender units to real-world units
+        unit_scale = get_scene_unit_scale()
+        
+        # Apply scale to dimensions
+        width = (maxx - minx) * unit_scale
+        depth = (maxy - miny) * unit_scale
+        height = (maxz - minz) * unit_scale
+        
+        # Center position also needs scaling
+        center = mathutils.Vector((
+            (minx + maxx) / 2.0 * unit_scale, 
+            (miny + maxy) / 2.0 * unit_scale, 
+            (minz + maxz) / 2.0 * unit_scale
+        ))
+        
+        return {'width': width, 'height': height, 'depth': depth, 'center': center, 'unit_scale': unit_scale}
     except Exception:
         return None
 
@@ -92,12 +165,33 @@ def measure_collection_bbox(coll: bpy.types.Collection) -> Optional[Dict[str, ob
 def create_or_update_helper_box(name: str, dims: Dict[str, float], center: mathutils.Vector) -> bpy.types.Object:
     """Create or update a wireframe helper box named with prefix `T4A_HELPER_`.
 
-    dims keys: width, height, depth (in meters)
-    center: world-space center position
+    dims keys: width, height, depth (in real-world units, e.g., meters)
+    center: world-space center position (in real-world units)
     Returns the helper object.
+    
+    Note: Dimensions and position are converted back to Blender units using inverse scale.
     """
     try:
         helper_name = f"T4A_HELPER_BOX_{name}"
+        
+        # Get scene unit scale
+        unit_scale = get_scene_unit_scale()
+        inverse_scale = 1.0 / unit_scale if unit_scale > 0 else 1.0
+        
+        # Convert real-world dimensions back to Blender units
+        blender_dims = {
+            'width': dims.get('width', 0.0) * inverse_scale,
+            'height': dims.get('height', 0.0) * inverse_scale,
+            'depth': dims.get('depth', 0.0) * inverse_scale
+        }
+        
+        # Convert real-world center back to Blender units
+        blender_center = mathutils.Vector((
+            center.x * inverse_scale,
+            center.y * inverse_scale,
+            center.z * inverse_scale
+        ))
+        
         # remove existing object with same name if present (force recreation if requested)
         existing = bpy.data.objects.get(helper_name)
         if existing and forceHelperBoxCreation:
@@ -113,22 +207,56 @@ def create_or_update_helper_box(name: str, dims: Dict[str, float], center: mathu
                 existing = None
 
         if existing:
-            # update scale and location
-            existing.location = center
-            existing.scale = ( (dims.get('width',0.0) / 2.0), (dims.get('depth',0.0) / 2.0), (dims.get('height',0.0) / 2.0) )
-            return existing
+            # Pour un objet existant, recréer la géométrie au lieu d'utiliser le scale
+            try:
+                # Supprimer l'ancien mesh
+                old_mesh = existing.data
+                
+                # Créer nouveau mesh avec les bonnes dimensions
+                new_mesh = create_box_mesh(
+                    helper_name + '_mesh',
+                    blender_dims.get('width', 0.0),
+                    blender_dims.get('depth', 0.0), 
+                    blender_dims.get('height', 0.0)
+                )
+                
+                # Assigner le nouveau mesh
+                existing.data = new_mesh
+                existing.location = blender_center
+                existing.scale = (1.0, 1.0, 1.0)  # Scale unitaire
+                
+                # Nettoyer l'ancien mesh
+                bpy.data.meshes.remove(old_mesh, do_unlink=True)
+                
+                return existing
+            except Exception:
+                # En cas d'erreur, recréer complètement
+                try:
+                    for uc in list(existing.users_collection):
+                        try:
+                            uc.objects.unlink(existing)
+                        except Exception:
+                            pass
+                    bpy.data.objects.remove(existing, do_unlink=True)
+                    existing = None
+                except Exception:
+                    existing = None
 
-        # create cube
-        bpy.ops.mesh.primitive_cube_add(size=1.0, location=center)
-        obj = bpy.context.active_object
-        if obj is None:
-            # fallback: create mesh data manually
-            mesh = bpy.data.meshes.new(helper_name + '_mesh')
-            obj = bpy.data.objects.new(helper_name, mesh)
-            bpy.context.collection.objects.link(obj)
+        # Créer un nouveau cube avec géométrie personnalisée
+        mesh = create_box_mesh(
+            helper_name + '_mesh',
+            blender_dims.get('width', 0.0),
+            blender_dims.get('depth', 0.0), 
+            blender_dims.get('height', 0.0)
+        )
+        obj = bpy.data.objects.new(helper_name, mesh)
+        obj.location = blender_center
+        obj.scale = (1.0, 1.0, 1.0)  # Scale unitaire
+        
+        # Lier à la collection courante temporairement
+        bpy.context.collection.objects.link(obj)
 
         obj.name = helper_name
-        obj.scale = ( (dims.get('width',0.0) / 2.0), (dims.get('depth',0.0) / 2.0), (dims.get('height',0.0) / 2.0) )
         # ensure in helpers collection
         coll_name = 'T4A_Helpers'
         coll = bpy.data.collections.get(coll_name)

@@ -15,19 +15,45 @@ Le code se base sur le style REST simple de votre exemple (urllib.request).
 
 import time
 import json
-import logging
 import traceback
 import urllib.request
 import urllib.error
 
 import bpy
 
-logger = logging.getLogger('T4A.Gemini')
-if not logger.handlers:
-    h = logging.StreamHandler()
-    h.setFormatter(logging.Formatter('%(asctime)s | %(name)s | %(levelname)s | %(message)s'))
-    logger.addHandler(h)
-    logger.setLevel(logging.DEBUG)
+
+def _t4a_print(level: str, msg: str, *args):
+    try:
+        if args:
+            print(f"[T4A] [{level}] " + (msg % args))
+        else:
+            print(f"[T4A] [{level}] {msg}")
+    except Exception:
+        if args:
+            parts = ' '.join(str(a) for a in args)
+            print(f"[T4A] [{level}] {msg} {parts}")
+        else:
+            print(f"[T4A] [{level}] {msg}")
+
+
+class _SimpleLogger:
+    def debug(self, msg, *args):
+        # Only print debug messages if debug mode is enabled
+        try:
+            from . import PROD_Parameters
+            if PROD_Parameters.is_debug_mode():
+                _t4a_print('DEBUG', msg, *args)
+        except Exception:
+            pass
+
+    def info(self, msg, *args):
+        _t4a_print('INFO', msg, *args)
+
+    def error(self, msg, *args):
+        _t4a_print('ERROR', msg, *args)
+
+
+logger = _SimpleLogger()
 
 
 def _get_prefs():
@@ -124,52 +150,7 @@ def _ensure_api_key_and_model(api_key: str = None, model: str = None):
     return key, (m or '')
 
 
-def call_gemini_api(prompt: str, api_key: str, model: str, timeout: int = 30):
-    """Appel REST minimaliste basé sur votre exemple.
 
-    Retourne la chaîne produite par le modèle ou None en cas d'échec.
-    """
-    try:
-        if not api_key:
-            return None
-        model_id = (model or '').replace('models/', '').strip()
-        if not model_id:
-            return None
-
-        # utilise v1beta generateContent path (v1/v1beta peuvent varier selon clé)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
-        headers = {'Content-Type': 'application/json'}
-        data = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
-        }
-        data_bytes = json.dumps(data).encode('utf-8')
-        req = urllib.request.Request(url, data=data_bytes, headers=headers)
-        logger.debug('Envoi vers endpoint: %s', url)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            txt = resp.read().decode('utf-8')
-            try:
-                obj = json.loads(txt)
-            except Exception:
-                logger.debug('Réponse non JSON: %s', txt[:200])
-                return None
-            # extraire texte
-            out = _extract_text_from_response_obj(obj)
-            if out:
-                return out
-            # fallback: return full obj string
-            return str(obj)
-    except urllib.error.HTTPError as he:
-        try:
-            body = he.read().decode('utf-8')
-        except Exception:
-            body = ''
-        logger.error('HTTPError %s: %s', he.code, body)
-        return None
-    except Exception:
-        logger.error('Exception calling Gemini: %s', traceback.format_exc())
-        return None
 
 
 # Public API
@@ -195,14 +176,22 @@ def list_models(api_key: str = None) -> dict:
             except Exception:
                 return {'success': False, 'status_code': None, 'detail': 'Non-JSON response from models endpoint'}
 
-            # extract short names
-            names = []
+            # extract all models with compatibility info
+            models_data = []
+            seen_names = set()
             for m in obj.get('models', []) if isinstance(obj, dict) else []:
                 try:
                     raw = m.get('name') if isinstance(m, dict) else str(m)
                     short = raw.split('/')[-1].strip()
-                    if short and short not in names:
-                        names.append(short)
+                    if short and short not in seen_names:
+                        seen_names.add(short)
+                        # Check if model supports generateContent
+                        supported_methods = m.get('supportedGenerationMethods', []) if isinstance(m, dict) else []
+                        is_compatible = 'generateContent' in supported_methods
+                        models_data.append({
+                            'name': short,
+                            'compatible': is_compatible
+                        })
                 except Exception:
                     continue
 
@@ -210,12 +199,12 @@ def list_models(api_key: str = None) -> dict:
             try:
                 prefs = _get_prefs()
                 if prefs is not None:
-                    prefs.model_list_json = json.dumps(names)
+                    prefs.model_list_json = json.dumps(models_data)
                     prefs.model_list_ts = time.time()
             except Exception:
                 logger.debug('Failed to save models into prefs: %s', traceback.format_exc())
 
-            return {'success': True, 'status_code': 200, 'detail': names}
+            return {'success': True, 'status_code': 200, 'detail': models_data}
     except urllib.error.HTTPError as he:
         try:
             body = he.read().decode('utf-8')
@@ -229,7 +218,7 @@ def list_models(api_key: str = None) -> dict:
         return {'success': False, 'status_code': None, 'detail': tb}
 
 
-def test_connection(api_key: str = None, model: str = None) -> dict:
+def test_connection(api_key: str = None, model: str = None, context=None) -> dict:
     key, m = _ensure_api_key_and_model(api_key=api_key, model=model)
     if not key:
         return {'success': False, 'status_code': None, 'detail': 'No API key provided'}
@@ -243,14 +232,22 @@ def test_connection(api_key: str = None, model: str = None) -> dict:
                     m = lst[0]
         except Exception:
             m = m or ''
-    # simple ping
-    out = call_gemini_api('Ping: say hello briefly.', api_key=key, model=m)
+    
+    # Utiliser le système de prompts configurables
+    try:
+        from . import PROD_prompt_tags
+        ping_prompt = PROD_prompt_tags.get_connection_test_prompt(context)
+    except Exception:
+        # Fallback vers l'ancien prompt
+        ping_prompt = 'Ping: say hello briefly.'
+    
+    out = call_gemini_api(ping_prompt, api_key=key, model=m)
     if out:
         return {'success': True, 'status_code': None, 'detail': out}
     return {'success': False, 'status_code': None, 'detail': 'No response from REST endpoint'}
 
 
-def analyze_text_dimensions(api_key: str = None, text: str = '', model: str = None) -> dict:
+def analyze_text_dimensions(api_key: str = None, text: str = '', model: str = None, context=None, file_path: str = '') -> dict:
     key, m = _ensure_api_key_and_model(api_key=api_key, model=model)
     if not key:
         return {'success': False, 'status_code': None, 'detail': 'No API key provided'}
@@ -275,18 +272,227 @@ def analyze_text_dimensions(api_key: str = None, text: str = '', model: str = No
         except Exception:
             m = m or ''
 
-    prompt_text = (
-        "Extract the 3D model dimensions from the following text. "
-        "Return the result as a compact string in meters in the format: "
-        "width: <value> m; height: <value> m; depth: <value> m. "
-        "If no dimensions are present, reply: NOT_FOUND. \nText:\n" + text
-    )
+    # Utiliser le système de prompts configurables
+    try:
+        from . import PROD_prompt_tags
+        prompt_text = PROD_prompt_tags.get_text_analysis_prompt(text, file_path, context)
+    except Exception:
+        # Fallback vers l'ancien prompt
+        prompt_text = (
+            "Extract the 3D model dimensions from the following text. "
+            "Return the result as a compact string in meters in the format: "
+            "width: <value> m; height: <value> m; depth: <value> m. "
+            "If no dimensions are present, reply: NOT_FOUND. \nText:\n" + text
+        )
 
-    out = call_gemini_api(prompt_text, api_key=key, model=m, timeout=30)
+    # Get timeout from preferences
+    timeout = 30
+    try:
+        prefs = _get_prefs()
+        if prefs:
+            timeout = getattr(prefs, 'api_timeout', 30)
+    except Exception:
+        pass
+
+    out = call_gemini_api(prompt_text, api_key=key, model=m, timeout=timeout)
     if out:
         return {'success': True, 'status_code': None, 'detail': out}
     else:
         return {'success': False, 'status_code': None, 'detail': 'REST generate failed: no response'}
 
 
-__all__ = ('list_models', 'test_connection', 'analyze_text_dimensions', 'call_gemini_api')
+def analyze_image_with_ocr(api_key=None, image_path=None, model=None, context=None, timeout=None, use_text_prompt=False):
+    """Analyze an image file with Gemini Vision, focusing on OCR and technical content extraction.
+    
+    Args:
+        api_key: Google API key for Gemini
+        image_path: Path to the image file (JPG/PNG)
+        model: Model name to use (defaults to prefs)
+        context: Blender context (optional)
+        timeout: Request timeout in seconds (defaults to prefs)
+        use_text_prompt: If True, use text analysis prompt instead of image prompt
+        
+    Returns:
+        Dict with 'success', 'status_code', 'detail' keys
+    """
+    import base64
+    import os
+    
+    if not image_path or not os.path.exists(image_path):
+        return {'success': False, 'status_code': None, 'detail': 'Image file not found'}
+    
+    # Read and encode image
+    try:
+        with open(image_path, 'rb') as f:
+            image_data = f.read()
+        image_b64 = base64.b64encode(image_data).decode('utf-8')
+    except Exception as e:
+        return {'success': False, 'status_code': None, 'detail': f'Failed to read image: {e}'}
+    
+    # Determine MIME type
+    ext = os.path.splitext(image_path)[1].lower()
+    if ext in ('.jpg', '.jpeg'):
+        mime_type = 'image/jpeg'
+    elif ext == '.png':
+        mime_type = 'image/png'
+    else:
+        return {'success': False, 'status_code': None, 'detail': f'Unsupported image format: {ext}'}
+    
+    # Get API key and model
+    key = api_key
+    m = model
+    prefs = None
+    
+    try:
+        from . import PROD_Parameters
+        prefs = PROD_Parameters.get_addon_preferences()
+    except Exception:
+        pass
+    
+    if not key and prefs:
+        try:
+            key = getattr(prefs, 'google_api_key', '')
+        except Exception:
+            pass
+    
+    if not m and prefs:
+        try:
+            m = getattr(prefs, 'model_name', '')
+        except Exception:
+            pass
+    
+    if not key:
+        return {'success': False, 'status_code': None, 'detail': 'No API key provided'}
+    
+    if not m:
+        m = 'gemini-2.5-flash'  # default model with vision support
+    
+    # Get timeout from preferences if not provided
+    if timeout is None:
+        timeout = 30
+        try:
+            if prefs:
+                timeout = getattr(prefs, 'api_timeout', 30)
+        except Exception:
+            pass
+    
+    # Utiliser le système de prompts configurables
+    try:
+        from . import PROD_prompt_tags
+        if use_text_prompt:
+            # Utiliser le prompt d'analyse de texte pour extraire les dimensions
+            prompt_text = PROD_prompt_tags.get_text_analysis_prompt(
+                text_content="",  # Pas de texte, l'image sera analysée
+                file_path=image_path, 
+                context=context,
+                content_type="image"
+            )
+        else:
+            # Utiliser le prompt spécialisé pour l'analyse d'image
+            prompt_text = PROD_prompt_tags.get_image_analysis_prompt(image_path, context)
+    except Exception:
+        # Fallback vers l'ancien prompt
+        if use_text_prompt:
+            file_name = os.path.basename(image_path) if image_path else "unknown"
+            prompt_text = f"""Extract the 3D model dimensions from this image. Return the result as a compact string in meters in the format: width: <value> m; height: <value> m; depth: <value> m. If no dimensions are present, reply: NOT_FOUND.
+Image file: {file_name}
+Analyze the image for dimensional information."""
+        else:
+            prompt_text = f"""Analyze this image thoroughly for 3D modeling and quality control:
+Image: {os.path.basename(image_path)}
+Extract dimensions, text, and technical information."""
+
+    # Call Gemini API with image
+    out = call_gemini_api(prompt_text, api_key=key, model=m, timeout=timeout, image_data=image_b64, image_mime_type=mime_type)
+    if out:
+        return {'success': True, 'status_code': None, 'detail': out}
+    else:
+        return {'success': False, 'status_code': None, 'detail': 'REST generate with image failed: no response'}
+
+
+def call_gemini_api(prompt, api_key=None, model=None, timeout=30, image_data=None, image_mime_type=None):
+    """Enhanced version of call_gemini_api that supports image input.
+    
+    Args:
+        prompt: Text prompt
+        api_key: Google API key
+        model: Model name
+        timeout: Request timeout
+        image_data: Base64-encoded image data (optional)
+        image_mime_type: MIME type of image (optional, e.g. 'image/jpeg')
+        
+    Returns:
+        Response text or None on failure
+    """
+    key, m = _ensure_api_key_and_model(api_key=api_key, model=model)
+    if not key:
+        logger.error('No API key provided for Gemini call')
+        return None
+    if not m:
+        m = 'gemini-2.5-flash'  # fallback
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
+    
+    # Build request payload
+    try:
+        if image_data and image_mime_type:
+            # Multi-modal request with image
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": image_mime_type,
+                                "data": image_data
+                            }
+                        }
+                    ]
+                }]
+            }
+        else:
+            # Text-only request
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}]
+            }
+        
+        req_data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            url, 
+            data=req_data, 
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        logger.debug('Calling Gemini API: %s', url)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            response_data = resp.read().decode('utf-8')
+            
+        response_json = json.loads(response_data)
+        
+        # Extract text from response
+        try:
+            candidates = response_json.get('candidates', [])
+            if candidates and len(candidates) > 0:
+                content = candidates[0].get('content', {})
+                parts = content.get('parts', [])
+                if parts and len(parts) > 0:
+                    return parts[0].get('text', '')
+        except Exception as e:
+            logger.error('Error parsing Gemini response: %s', e)
+            logger.debug('Raw response: %s', response_data)
+            
+        return None
+        
+    except urllib.error.HTTPError as he:
+        try:
+            error_body = he.read().decode('utf-8')
+            logger.error('Gemini API HTTP error %s: %s', he.code, error_body)
+        except Exception:
+            logger.error('Gemini API HTTP error: %s', he.code)
+        return None
+    except Exception as e:
+        logger.error('Gemini API call failed: %s', e)
+        return None
+
+
+__all__ = ('list_models', 'test_connection', 'analyze_text_dimensions', 'analyze_image_with_ocr', 'call_gemini_api')

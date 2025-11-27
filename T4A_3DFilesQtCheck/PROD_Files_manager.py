@@ -3,17 +3,42 @@ import bpy
 import threading
 import time
 import json
-import logging
 
 from typing import List
 
 
-logger = logging.getLogger('T4A.FilesManager')
-if not logger.handlers:
-    h = logging.StreamHandler()
-    h.setFormatter(logging.Formatter('%(asctime)s | %(name)s | %(levelname)s | %(message)s'))
-    logger.addHandler(h)
-    logger.setLevel(logging.DEBUG)
+def _t4a_print(level: str, msg: str, *args):
+    try:
+        if args:
+            print(f"[T4A] [{level}] " + (msg % args))
+        else:
+            print(f"[T4A] [{level}] {msg}")
+    except Exception:
+        if args:
+            parts = ' '.join(str(a) for a in args)
+            print(f"[T4A] [{level}] {msg} {parts}")
+        else:
+            print(f"[T4A] [{level}] {msg}")
+
+
+class _SimpleLogger:
+    def debug(self, msg, *args):
+        # Only print debug messages if debug mode is enabled
+        try:
+            from . import PROD_Parameters
+            if PROD_Parameters.is_debug_mode():
+                _t4a_print('DEBUG', msg, *args)
+        except Exception:
+            pass
+
+    def info(self, msg, *args):
+        _t4a_print('INFO', msg, *args)
+
+    def error(self, msg, *args):
+        _t4a_print('ERROR', msg, *args)
+
+
+logger = _SimpleLogger()
 
 
 def _gather_files(path: str, exts: List[str]) -> List[str]:
@@ -304,8 +329,9 @@ class T4A_OT_ImportFileToCollection(bpy.types.Operator):
         except Exception:
             pass
 
-        # After import, try to find a matching TXT/PDF with the same base name
+        # After import, try to find a matching JPG/PNG/TXT/PDF with the same base name
         # in the configured scan path and request analysis if present.
+        # Priority: Images (JPG/PNG) first, then TXT/PDF files
         try:
             from . import PROD_Parameters
             addon_name = PROD_Parameters.__package__
@@ -317,18 +343,53 @@ class T4A_OT_ImportFileToCollection(bpy.types.Operator):
 
             if base_path:
                 stem = os.path.splitext(base)[0]
-                for ext in ('.txt', '.pdf'):
+                
+                # Search for files in order of priority: JPG/PNG (images) first, then TXT/PDF
+                found = None
+                found_type = None
+                
+                # Priority 1: Images (JPG/PNG)
+                for ext in ('.jpg', '.jpeg', '.png'):
                     candidate = os.path.join(base_path, stem + ext)
                     if os.path.exists(candidate):
-                        try:
-                            # call operator to analyze file; it will log/store results
-                            bpy.ops.t4a.analyze_text_file(filepath=candidate)
-                            logger.info("[T4A] Analyse lancée pour: %s", candidate)
-                        except Exception as e:
-                            logger.error("[T4A] Échec analyse pour %s: %s", candidate, e)
+                        found = candidate
+                        found_type = 'image'
+                        logger.debug("[T4A] Image trouvée: %s", candidate)
                         break
+                
+                # Priority 2: Text/PDF files (only if no image found)
+                if not found:
+                    for ext in ('.txt', '.pdf'):
+                        candidate = os.path.join(base_path, stem + ext)
+                        if os.path.exists(candidate):
+                            found = candidate
+                            found_type = 'text'
+                            logger.debug("[T4A] Fichier texte trouvé: %s", candidate)
+                            break
+                
+                if found:
+                    # call appropriate analyze operator based on file type
+                    try:
+                        if found_type == 'image':
+                            # Utiliser le prompt d'analyse de texte pour extraire les dimensions des images
+                            bpy.ops.t4a.analyze_image_file_for_dimensions(filepath=found)
+                            logger.info("[T4A] Analyse d'image (dimensions) lancée pour: %s", found)
+                        else:  # text/pdf
+                            bpy.ops.t4a.analyze_text_file(filepath=found)
+                            logger.info("[T4A] Analyse de texte lancée pour: %s", found)
+                    except Exception as e:
+                        logger.error("[T4A] Échec analyse pour %s: %s", found, e)
+                else:
+                    logger.debug("[T4A] Aucun fichier correspondant trouvé pour: %s", stem)
         except Exception as e:
             logger.error("[T4A] Recherche/analyse post-import échouée: %s", e)
+
+        # Schedule dimension verification after import and potential analysis
+        try:
+            bpy.ops.t4a.verify_dimensions_on_import(collection_name=coll_name)
+            logger.debug("[T4A] Vérification des dimensions programmée pour: %s", coll_name)
+        except Exception as e:
+            logger.error("[T4A] Erreur lors de la programmation de vérification: %s", e)
 
         return {'FINISHED'}
 
@@ -346,7 +407,7 @@ class T4A_OT_TestGeminiConnection(bpy.types.Operator):
             from . import PROD_Parameters
             api_key = ''
             try:
-                prefs = context.preferences.addons[PROD_Parameters.__package__].preferences
+                prefs = PROD_Parameters.get_addon_preferences()
                 api_key = prefs.google_api_key
                 model_name = getattr(prefs, 'model_name', None)
             except Exception:
@@ -357,9 +418,9 @@ class T4A_OT_TestGeminiConnection(bpy.types.Operator):
             from . import PROD_gemini
 
             if model_name:
-                res = PROD_gemini.test_connection(api_key, model=model_name)
+                res = PROD_gemini.test_connection(api_key, model=model_name, context=context)
             else:
-                res = PROD_gemini.test_connection(api_key)
+                res = PROD_gemini.test_connection(api_key, context=context)
             logger.info('[T4A Gemini Test] result: %s', res)
             self.report({'INFO'}, 'Gemini test logged to console')
             return {'FINISHED'}
@@ -416,7 +477,7 @@ class T4A_OT_AnalyzeTextFile(bpy.types.Operator):
             api_key = ''
             model_name = None
             try:
-                prefs = context.preferences.addons[PROD_Parameters.__package__].preferences
+                prefs = PROD_Parameters.get_addon_preferences()
                 api_key = prefs.google_api_key
                 model_name = getattr(prefs, 'model_name', None)
             except Exception:
@@ -475,9 +536,9 @@ class T4A_OT_AnalyzeTextFile(bpy.types.Operator):
             from . import PROD_gemini
 
             if model_name:
-                res = PROD_gemini.analyze_text_dimensions(api_key, text, model=model_name)
+                res = PROD_gemini.analyze_text_dimensions(api_key, text, model=model_name, context=context, file_path=filepath)
             else:
-                res = PROD_gemini.analyze_text_dimensions(api_key, text)
+                res = PROD_gemini.analyze_text_dimensions(api_key, text, context=context, file_path=filepath)
             detail = res.get('detail')
             # coerce detail to string
             if isinstance(detail, dict):
@@ -516,96 +577,47 @@ class T4A_OT_ListGeminiModels(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from . import PROD_Parameters
+            from . import PROD_Parameters, PROD_gemini
             try:
-                prefs = context.preferences.addons[PROD_Parameters.__package__].preferences
+                prefs = PROD_Parameters.get_addon_preferences()
                 api_key = prefs.google_api_key
             except Exception:
-                prefs = None
                 api_key = os.environ.get('GOOGLE_API_KEY', '')
 
             if not api_key:
                 self.report({'ERROR'}, 'No API key provided')
                 return {'CANCELLED'}
 
-            import json
-            import urllib.request
-            import urllib.error
-
-            # Use the v1beta models listing endpoint; ensure we use the API key from prefs
-            API_KEY = (api_key or '').strip()
-            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={API_KEY}"
-
-            # Reset stored model list before fetching so UI sees a clean state
-            try:
-                if prefs is not None:
-                    prefs.model_list_json = '[]'
-                    prefs.model_list_ts = 0.0
-            except Exception:
-                pass
-
-            try:
-                logger.debug("Récupération de la liste des modèles...")
-                with urllib.request.urlopen(url) as response:
-                    data = json.loads(response.read().decode('utf-8'))
-                    logger.debug("--- MODÈLES DISPONIBLES POUR VOTRE CLÉ ---")
-                    found_any = False
-                    seen = set()
-                    ordered = []
-                    for model in data.get('models', []):
-                        # Keep only models that support generateContent
-                        if "generateContent" in model.get('supportedGenerationMethods', []):
-                            raw_name = model.get('name', '')
-                            if not raw_name:
-                                continue
-                            # extract the last path segment after any '/'
-                            short_name = raw_name.split('/')[-1].strip()
-                            if not short_name:
-                                continue
-                            # avoid duplicates while preserving order
-                            if short_name in seen:
-                                continue
-                            seen.add(short_name)
-                            ordered.append(short_name)
-                            logger.debug("Nom à utiliser : %s", short_name)
-                            found_any = True
-                    logger.debug("------------------------------------------")
-
-                    if not found_any:
-                        logger.debug("Aucun modèle compatible 'generateContent' trouvé.")
+            # Use the centralized list_models function
+            result = PROD_gemini.list_models(api_key)
+            
+            if result.get('success'):
+                models_data = result.get('detail', [])
+                compatible_count = sum(1 for m in models_data if isinstance(m, dict) and m.get('compatible', True))
+                total_count = len(models_data)
+                
+                self.report({'INFO'}, f'Liste récupérée: {total_count} modèles ({compatible_count} compatibles generateContent)')
+                
+                # Log details to console
+                print(f"[T4A] [INFO] --- MODÈLES DISPONIBLES POUR VOTRE CLÉ ---")
+                for model_info in models_data:
+                    if isinstance(model_info, dict):
+                        name = model_info.get('name', 'Unknown')
+                        compatible = model_info.get('compatible', True)
+                        status = "✓" if compatible else "✗"
+                        print(f"[T4A] [INFO] {status} {name} {'(compatible generateContent)' if compatible else '(incompatible)'}")
                     else:
-                        # store results into addon preferences so EnumProperty updates
-                        try:
-                            if prefs is not None:
-                                import json as _json
-                                prefs.model_list_json = _json.dumps(ordered)
-                                prefs.model_list_ts = time.time()
-                                # Optionally set model_name if not set or not in list
-                                try:
-                                    cur = getattr(prefs, 'model_name', None)
-                                    if not cur and ordered:
-                                        prefs.model_name = ordered[0]
-                                except Exception:
-                                    pass
-                        except Exception as e:
-                            logger.error('[T4A List Models] Failed to save model list to preferences: %s', e)
-
-                self.report({'INFO'}, 'Liste modèles récupérée (voir console)')
+                        print(f"[T4A] [INFO] ✓ {model_info}")
+                print(f"[T4A] [INFO] ------------------------------------------")
+                
                 return {'FINISHED'}
-            except urllib.error.HTTPError as e:
-                body = ''
-                try:
-                    body = e.read().decode('utf-8')
-                except Exception:
-                    pass
-                logger.error("Erreur HTTP : %s - %s", getattr(e, 'code', ''), getattr(e, 'reason', ''))
-                if body:
-                    logger.error(body)
-                self.report({'ERROR'}, f"HTTP Error {getattr(e, 'code', 'unknown')}")
-                return {'CANCELLED'}
-            except Exception as e:
-                logger.error('Erreur : %s', e)
-                self.report({'ERROR'}, f"Erreur: {e}")
+            else:
+                detail = result.get('detail', 'Unknown error')
+                status_code = result.get('status_code')
+                if status_code:
+                    self.report({'ERROR'}, f"HTTP Error {status_code}")
+                else:
+                    self.report({'ERROR'}, f"Listing failed: {detail}")
                 return {'CANCELLED'}
         except Exception as e:
             logger.error('[T4A List Models] error: %s', e)
@@ -613,17 +625,230 @@ class T4A_OT_ListGeminiModels(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+class T4A_OT_AnalyzeImageFileForDimensions(bpy.types.Operator):
+    bl_idname = "t4a.analyze_image_file_for_dimensions"
+    bl_label = "Analyze Image File for Dimensions"
+    bl_description = "Analyze a JPG/PNG image using text analysis prompt to extract dimensions"
+
+    filepath: bpy.props.StringProperty(name="Filepath", subtype='FILE_PATH')
+
+    def execute(self, context):
+        filepath = self.filepath
+        if not filepath or not os.path.exists(filepath):
+            self.report({'ERROR'}, "Image file not found")
+            return {'CANCELLED'}
+
+        # Check if file is supported image format
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext not in ('.jpg', '.jpeg', '.png'):
+            self.report({'ERROR'}, 'Unsupported image format. Only JPG and PNG are supported.')
+            return {'CANCELLED'}
+
+        # Get API key and model
+        try:
+            from . import PROD_Parameters
+            api_key = ''
+            model_name = None
+            try:
+                prefs = PROD_Parameters.get_addon_preferences()
+                api_key = prefs.google_api_key
+                model_name = getattr(prefs, 'model_name', None)
+            except Exception:
+                api_key = os.environ.get('GOOGLE_API_KEY', '')
+                model_name = os.environ.get('MODEL_NAME', None)
+
+            if not api_key:
+                self.report({'ERROR'}, 'No API key configured')
+                return {'CANCELLED'}
+
+            from . import PROD_gemini
+
+            # Call the image analysis function with text prompt
+            if model_name:
+                res = PROD_gemini.analyze_image_with_ocr(
+                    api_key, filepath, 
+                    model=model_name, 
+                    context=context, 
+                    use_text_prompt=True  # Utiliser le prompt text pour extraire les dimensions
+                )
+            else:
+                res = PROD_gemini.analyze_image_with_ocr(
+                    api_key, filepath, 
+                    context=context, 
+                    use_text_prompt=True  # Utiliser le prompt text pour extraire les dimensions
+                )
+                
+            detail = res.get('detail')
+            # coerce detail to string
+            if isinstance(detail, dict):
+                detail_str = str(detail)
+            else:
+                detail_str = str(detail)
+
+            # store into scene collection
+            try:
+                scene = context.scene
+                item = scene.t4a_dimensions.add()
+                item.name = f"IMG_{os.path.basename(filepath)}"
+                item.dimensions = detail_str
+                
+                self.report({'INFO'}, f'Image analyzed for dimensions: {os.path.basename(filepath)}')
+                
+                # log debug if debug_mode is enabled
+                try:
+                    from . import PROD_Parameters
+                    prefs = PROD_Parameters.get_addon_preferences()
+                    if getattr(prefs, 'debug_mode', False):
+                        print(f"[DEBUG] Image dimensions analysis result: {detail_str}")
+                except Exception:
+                    pass
+                    
+            except Exception as e:
+                self.report({'ERROR'}, f'Failed to store analysis result: {e}')
+                return {'CANCELLED'}
+
+        except Exception as e:
+            self.report({'ERROR'}, f'Image analysis failed: {e}')
+            return {'CANCELLED'}
+
+        return {'FINISHED'}
+
+
+class T4A_OT_AnalyzeImageFile(bpy.types.Operator):
+    bl_idname = "t4a.analyze_image_file"
+    bl_label = "Analyze Image File"
+    bl_description = "Analyze a JPG/PNG image with Gemini Vision for OCR and technical content extraction"
+
+    filepath: bpy.props.StringProperty(name="Filepath", subtype='FILE_PATH')
+
+    def execute(self, context):
+        filepath = self.filepath
+        if not filepath or not os.path.exists(filepath):
+            self.report({'ERROR'}, "Image file not found")
+            return {'CANCELLED'}
+
+        # Check if file is supported image format
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext not in ('.jpg', '.jpeg', '.png'):
+            self.report({'ERROR'}, 'Unsupported image format. Only JPG and PNG are supported.')
+            return {'CANCELLED'}
+
+        # Get API key and model
+        try:
+            from . import PROD_Parameters
+            api_key = ''
+            model_name = None
+            try:
+                prefs = PROD_Parameters.get_addon_preferences()
+                api_key = prefs.google_api_key
+                model_name = getattr(prefs, 'model_name', None)
+            except Exception:
+                api_key = os.environ.get('GOOGLE_API_KEY', '')
+                model_name = os.environ.get('MODEL_NAME', None)
+
+            if not api_key:
+                self.report({'ERROR'}, 'No API key configured')
+                return {'CANCELLED'}
+
+            # Ensure model list is fresh before using model_name
+            try:
+                TTL = 3600
+                now = time.time()
+                ts = float(getattr(prefs, 'model_list_ts', 0) or 0)
+                if now - ts >= TTL:
+                    # refresh synchronously using PROD_gemini.list_models
+                    try:
+                        from . import PROD_gemini
+                        res = PROD_gemini.list_models(api_key)
+                        if res.get('success'):
+                            detail = res.get('detail')
+                            if detail and isinstance(detail, list):
+                                try:
+                                    # Store the complete list with compatibility info
+                                    prefs.model_list_json = json.dumps(detail)
+                                    prefs.model_list_ts = time.time()
+                                    # if no model_name, set to first compatible model
+                                    if not getattr(prefs, 'model_name', None):
+                                        try:
+                                            # Find first compatible model, fallback to first model
+                                            first_compatible = None
+                                            first_model = None
+                                            for model_info in detail:
+                                                if isinstance(model_info, dict):
+                                                    name = model_info.get('name', '')
+                                                    if name:
+                                                        if first_model is None:
+                                                            first_model = name
+                                                        if model_info.get('compatible', False) and first_compatible is None:
+                                                            first_compatible = name
+                                            
+                                            prefs.model_name = first_compatible or first_model or 'models/gemini-2.5-flash-lite'
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+                    # re-read model_name after refresh
+                    try:
+                        model_name = getattr(prefs, 'model_name', None)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            from . import PROD_gemini
+
+            # Call the image analysis function
+            if model_name:
+                res = PROD_gemini.analyze_image_with_ocr(api_key, filepath, model=model_name, context=context)
+            else:
+                res = PROD_gemini.analyze_image_with_ocr(api_key, filepath, context=context)
+                
+            detail = res.get('detail')
+            # coerce detail to string
+            if isinstance(detail, dict):
+                detail_str = str(detail)
+            else:
+                detail_str = str(detail)
+
+            # store into scene collection
+            try:
+                scene = context.scene
+                item = scene.t4a_dimensions.add()
+                item.name = f"IMG_{os.path.basename(filepath)}"
+                item.dimensions = detail_str
+                item.expanded = False
+            except Exception:
+                pass
+
+            logger.info('[T4A Analyze Image] result: %s', res)
+            
+            # If server returned error, give helpful report
+            status = res.get('status_code')
+            if status == 404:
+                self.report({'ERROR'}, "Analyse d'image échouée (404). Vérifiez le 'Model Name' dans les préférences.")
+            elif not res.get('success'):
+                self.report({'ERROR'}, f"Analyse d'image échouée: {detail}")
+            else:
+                self.report({'INFO'}, 'Image analysis completed; result stored')
+            return {'FINISHED'}
+        except Exception as e:
+            logger.error('[T4A Analyze Image] error %s', e)
+            self.report({'ERROR'}, f'Image analysis failed: {e}')
+            return {'CANCELLED'}
+
+
 class T4A_OT_FindMatchingTextAndAnalyze(bpy.types.Operator):
     bl_idname = "t4a.find_and_analyze_matching"
-    bl_label = "Find matching TXT/PDF and analyze"
-    bl_description = "Look for TXT/PDF files with same base name as imported 3D files and analyze them"
+    bl_label = "Find matching files and analyze"
+    bl_description = "Look for JPG/PNG/TXT/PDF files with same base name as imported 3D files and analyze them (Images prioritized)"
 
     def execute(self, context):
         try:
             from . import PROD_Parameters
-            addon_name = PROD_Parameters.__package__
             try:
-                prefs = context.preferences.addons[addon_name].preferences
+                prefs = PROD_Parameters.get_addon_preferences()
                 base_path = prefs.scan_path
             except Exception:
                 base_path = os.environ.get('SCAN_PATH', '')
@@ -643,22 +868,46 @@ class T4A_OT_FindMatchingTextAndAnalyze(bpy.types.Operator):
                     continue
                 base = parts[1]
                 stem = os.path.splitext(base)[0]
-                # search for stem.txt or stem.pdf
+                
+                # Search for files in order of priority: JPG/PNG (images) first, then TXT/PDF
                 found = None
-                for ext in ('.txt', '.pdf'):
+                found_type = None
+                
+                # Priority 1: Images (JPG/PNG)
+                for ext in ('.jpg', '.jpeg', '.png'):
                     candidate = os.path.join(base_path, stem + ext)
                     if os.path.exists(candidate):
                         found = candidate
+                        found_type = 'image'
                         break
+                
+                # Priority 2: Text/PDF files (only if no image found)
+                if not found:
+                    for ext in ('.txt', '.pdf'):
+                        candidate = os.path.join(base_path, stem + ext)
+                        if os.path.exists(candidate):
+                            found = candidate
+                            found_type = 'text'
+                            break
+                
                 if found:
-                    # call analyze operator
+                    # call appropriate analyze operator based on file type
                     try:
-                        bpy.ops.t4a.analyze_text_file(filepath=found)
+                        if found_type == 'image':
+                            # Utiliser le prompt d'analyse de texte pour extraire les dimensions des images
+                            bpy.ops.t4a.analyze_image_file_for_dimensions(filepath=found)
+                            logger.info('[T4A] Image analysis (dimensions) launched for: %s', found)
+                        else:  # text/pdf
+                            bpy.ops.t4a.analyze_text_file(filepath=found)
+                            logger.info('[T4A] Text analysis launched for: %s', found)
                         processed += 1
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error('[T4A] Analysis failed for %s: %s', found, e)
 
-            self.report({'INFO'}, f'Processed {processed} matching text files')
+            if processed > 0:
+                self.report({'INFO'}, f'Processed {processed} matching files')
+            else:
+                self.report({'INFO'}, 'No matching files found')
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f'Find/Analyze failed: {e}')
@@ -709,6 +958,8 @@ classes = (
     T4A_OT_ImportFileToCollection,
     T4A_OT_TestGeminiConnection,
     T4A_OT_AnalyzeTextFile,
+    T4A_OT_AnalyzeImageFile,
+    T4A_OT_AnalyzeImageFileForDimensions,
     T4A_OT_ListGeminiModels,
     T4A_OT_FindMatchingTextAndAnalyze,
 )

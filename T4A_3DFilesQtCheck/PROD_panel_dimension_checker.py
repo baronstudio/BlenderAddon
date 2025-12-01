@@ -77,47 +77,54 @@ class T4A_PT_DimensionChecker(bpy.types.Panel):
                 
             found_collections = True
             
-            # Check if AI dimensions are available for this collection
-            has_ai_dims = False
-            try:
-                # Extract base name from collection name (remove EXT_ prefix)
-                parts = coll.name.split('_', 1)
-                if len(parts) == 2:
-                    base_name = parts[1]
-                    stem = os.path.splitext(base_name)[0]
-                    
-                    # Check if there's a matching dimension analysis
-                    dims_collection = getattr(scene, 't4a_dimensions', None)
-                    if dims_collection:
-                        for item in dims_collection:
-                            item_name = item.name
-                            if (stem in item_name or 
-                                item_name.startswith(f"IMG_{stem}") or
-                                item_name == base_name or
-                                os.path.splitext(item_name)[0] == stem):
-                                # Check if the dimensions contain actual values
-                                dim_text = getattr(item, 'dimensions', '') or ''
-                                if dim_text.strip() and 'NOT_FOUND' not in dim_text.upper():
-                                    has_ai_dims = True
-                                break
-            except Exception:
-                pass
+            # Obtenir le statut des dimensions pour cette collection
+            from . import PROD_dimension_checker
+            dim_status = PROD_dimension_checker.get_dimension_status(coll.name)
+            status = dim_status['status']
+            has_ai_dims = dim_status['has_ai_dims']
+            difference = dim_status['difference']
             
             # Collection row with name and check button
             row = box.row()
             split = row.split(factor=0.6)
             
-            # Collection name with warning icon if no AI dimensions
+            # Collection name avec icône de statut
             name_row = split.row()
-            if not has_ai_dims:
-                name_row.alert = True
-                name_row.label(text="⚠", icon='ERROR')
             
-            # Collection name (truncate if too long)
+            # Icône et couleur selon le statut
+            if status == 'NO_AI_DATA':
+                name_row.alert = True
+                name_row.label(text="", icon='ERROR')  # Icône rouge pour pas de données
+                tooltip = "Pas de données IA disponibles"
+            elif status == 'OK':
+                name_row.label(text="", icon='CHECKMARK')  # Icône verte pour OK
+                tooltip = f"Dimensions conformes (diff: {difference:.1f}%)"
+            elif status == 'WARNING':
+                name_row.alert = True
+                name_row.label(text="", icon='ERROR')  # Icône orange pour warning
+                tooltip = f"Dimensions hors tolérance (diff: {difference:.1f}%)"
+            else:  # ERROR
+                name_row.alert = True
+                name_row.label(text="", icon='CANCEL')  # Icône rouge pour erreur critique
+                tooltip = f"Différence critique (diff: {difference:.1f}%)"
+            
+            # Collection name (tronquer si trop long)
             coll_display = coll.name
             if len(coll_display) > 15:
                 coll_display = coll_display[:12] + "..."
-            name_row.label(text=coll_display)
+            
+            # Nom avec couleur selon le statut
+            name_label = name_row.row()
+            if status in ['WARNING', 'ERROR']:
+                name_label.alert = True
+            name_label.label(text=coll_display)
+            
+            # Affichage du pourcentage si hors tolérance
+            if status in ['WARNING', 'ERROR'] and difference > 0:
+                perc_label = name_row.row()
+                perc_label.scale_x = 0.7
+                perc_label.alert = True
+                perc_label.label(text=f"({difference:.1f}%)")
             
             # Check dimensions button
             button_split = split.split(factor=0.7)

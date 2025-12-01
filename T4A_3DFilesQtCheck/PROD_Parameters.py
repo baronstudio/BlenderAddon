@@ -158,6 +158,58 @@ Provide detailed analysis focusing on 3D modeling requirements.""",
         default="models/gemini-2.5-flash-lite"
     )
 
+    # --- PARAMÈTRES UV ---
+    uv_overlap_threshold: bpy.props.FloatProperty(
+        name="Seuil Overlap UV (%)",
+        description="Pourcentage d'overlap UV considéré comme problématique",
+        default=1.0,
+        min=0.1,
+        max=50.0,
+        subtype='PERCENTAGE'
+    )
+    
+    uv_grid_resolution: bpy.props.IntProperty(
+        name="Résolution Grille UV",
+        description="Résolution de la grille pour l'analyse d'overlap (plus élevé = plus précis mais plus lent)",
+        default=256,
+        min=64,
+        max=1024
+    )
+    
+    uv_square_tolerance: bpy.props.FloatProperty(
+        name="Tolérance Ratio Carré",
+        description="Tolérance pour considérer un layout UV comme carré (±0.1 = ratio entre 0.9 et 1.1)",
+        default=0.1,
+        min=0.01,
+        max=0.5
+    )
+    
+    # --- PARAMÈTRES TOPOLOGIE ---
+    topology_duplicate_tolerance: bpy.props.FloatProperty(
+        name="Tolérance Vertices Dupliqués",
+        description="Distance minimale pour considérer des vertices comme dupliqués (en mètres)",
+        default=0.0001,
+        min=0.00001,
+        max=0.01,
+        precision=6,
+        unit='LENGTH'
+    )
+    
+    topology_normal_threshold: bpy.props.FloatProperty(
+        name="Seuil Cohérence Normales",
+        description="Seuil de cohérence des normales (0.0 = aucune cohérence, 1.0 = cohérence parfaite)",
+        default=0.5,
+        min=0.0,
+        max=1.0,
+        precision=2
+    )
+    
+    topology_analyze_vertex_colors: bpy.props.BoolProperty(
+        name="Analyser Vertex Colors",
+        description="Inclure l'analyse des vertex colors dans l'analyse topologique",
+        default=True
+    )
+
     # Note: Vertex/Service Account mode removed in favor of google-generativeai (API key)
 
     def draw(self, context):
@@ -236,6 +288,16 @@ Provide detailed analysis focusing on 3D modeling requirements.""",
         reset_op.prompt_type = "connection_test"
 
         layout.separator()
+
+        # --- PARAMÈTRES UV ---
+        uv_box = layout.box()
+        uv_box.label(text="Paramètres Analyse UV", icon='UV')
+        
+        row = uv_box.row()
+        row.prop(self, "uv_overlap_threshold")
+        row.prop(self, "uv_grid_resolution")
+        
+        uv_box.prop(self, "uv_square_tolerance")
 
         layout.separator()
 
@@ -347,14 +409,133 @@ def register_scene_props():
     )
 
 
+class T4A_UVResult(bpy.types.PropertyGroup):
+    """Stocke les résultats d'analyse UV pour un modèle."""
+    # Overlaps
+    has_overlaps: bpy.props.BoolProperty(name="A des Overlaps", default=False)
+    overlap_percentage: bpy.props.FloatProperty(name="% Overlap", default=0.0)
+    overlap_count: bpy.props.IntProperty(name="Nombre d'Overlaps", default=0)
+    
+    # Outside bounds
+    has_outside_uvs: bpy.props.BoolProperty(name="UVs Hors Limites", default=False)
+    outside_percentage: bpy.props.FloatProperty(name="% UVs Extérieures", default=0.0) 
+    outside_count: bpy.props.IntProperty(name="Faces Hors Limites", default=0)
+    
+    # Proportions
+    is_square: bpy.props.BoolProperty(name="Layout Carré", default=True)
+    aspect_ratio: bpy.props.FloatProperty(name="Ratio Aspect", default=1.0)
+    distortion_average: bpy.props.FloatProperty(name="Distortion Moyenne", default=0.0)
+    
+    # UDIM
+    uses_udim: bpy.props.BoolProperty(name="Utilise UDIM", default=False)
+    udim_tiles: bpy.props.StringProperty(name="Tiles UDIM", default="1001")  # Ex: "1001,1002,1011"
+    udim_count: bpy.props.IntProperty(name="Nombre de Tiles", default=1)
+    
+    # Général
+    total_faces: bpy.props.IntProperty(name="Faces Totales", default=0)
+    uv_layers_count: bpy.props.IntProperty(name="Couches UV", default=0)
+    analysis_success: bpy.props.BoolProperty(name="Analyse Réussie", default=False)
+    analysis_error: bpy.props.StringProperty(name="Erreur", default="")
+
+
+class T4A_TopologyResult(bpy.types.PropertyGroup):
+    """Stocke les résultats d'analyse topologique pour un modèle."""
+    # Status général
+    analysis_success: bpy.props.BoolProperty(name="Analyse Réussie", default=False)
+    analysis_error: bpy.props.StringProperty(name="Erreur", default="")
+    
+    # Statistiques générales
+    total_vertices: bpy.props.IntProperty(name="Vertices Totaux", default=0)
+    total_polygons: bpy.props.IntProperty(name="Polygones Totaux", default=0)
+    
+    # Manifold issues
+    has_manifold_issues: bpy.props.BoolProperty(name="Problèmes Manifold", default=False)
+    manifold_error_count: bpy.props.IntProperty(name="Erreurs Manifold", default=0)
+    
+    # Normales
+    normal_consistency: bpy.props.FloatProperty(name="Cohérence Normales (%)", default=100.0)
+    inverted_faces_count: bpy.props.IntProperty(name="Faces Inversées", default=0)
+    has_normal_issues: bpy.props.BoolProperty(name="Problèmes Normales", default=False)
+    
+    # Vertices
+    isolated_vertices_count: bpy.props.IntProperty(name="Vertices Isolés", default=0)
+    has_isolated_vertices: bpy.props.BoolProperty(name="A Vertices Isolés", default=False)
+    duplicate_vertices_count: bpy.props.IntProperty(name="Vertices Dupliqués", default=0)
+    has_duplicate_vertices: bpy.props.BoolProperty(name="A Vertices Dupliqués", default=False)
+    
+    # Vertex colors
+    has_vertex_colors: bpy.props.BoolProperty(name="A Vertex Colors", default=False)
+    vertex_color_layers_count: bpy.props.IntProperty(name="Couches Vertex Colors", default=0)
+    objects_with_vertex_colors: bpy.props.IntProperty(name="Objets avec Vertex Colors", default=0)
+    
+    # Distribution polygones
+    triangles_percentage: bpy.props.FloatProperty(name="% Triangles", default=0.0)
+    quads_percentage: bpy.props.FloatProperty(name="% Quads", default=0.0)
+    ngons_percentage: bpy.props.FloatProperty(name="% N-Gons", default=0.0)
+    triangles_count: bpy.props.IntProperty(name="Nombre Triangles", default=0)
+    quads_count: bpy.props.IntProperty(name="Nombre Quads", default=0)
+    ngons_count: bpy.props.IntProperty(name="Nombre N-Gons", default=0)
+    average_quad_percentage: bpy.props.FloatProperty(name="% Quads Moyen", default=0.0)
+
+
+class T4A_TextureResult(bpy.types.PropertyGroup):
+    """Stocke les statistiques de textures pour un modèle."""
+    texture_count: bpy.props.IntProperty(name="Nombre de Textures", default=0)
+    total_size_kb: bpy.props.FloatProperty(name="Taille Totale (KB)", default=0.0)
+    max_resolution: bpy.props.StringProperty(name="Plus Grande Résolution", default="N/A")
+    min_resolution: bpy.props.StringProperty(name="Plus Petite Résolution", default="N/A")
+    texture_directory: bpy.props.StringProperty(name="Dossier Textures", default="")
+    extracted_count: bpy.props.IntProperty(name="Textures Extraites", default=0)
+    consolidated_count: bpy.props.IntProperty(name="Textures Consolidées", default=0)
+    analysis_success: bpy.props.BoolProperty(name="Analyse Réussie", default=False)
+    analysis_error: bpy.props.StringProperty(name="Erreur d'Analyse", default="")
+
+
 class T4A_DimResult(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="File Name")
     dimensions: bpy.props.StringProperty(name="Dimensions", default="")
     expanded: bpy.props.BoolProperty(name="Expanded", default=False)
+    # Ajout du statut de tolérance
+    tolerance_status: bpy.props.EnumProperty(
+        name="Tolerance Status",
+        items=[
+            ('OK', 'OK', 'Dimensions within tolerance'),
+            ('WARNING', 'Warning', 'Dimensions outside tolerance'),
+            ('ERROR', 'Error', 'Critical dimension difference'),
+            ('NO_AI_DATA', 'No Data', 'No AI dimension data available')
+        ],
+        default='NO_AI_DATA'
+    )
+    difference_percentage: bpy.props.FloatProperty(
+        name="Difference Percentage",
+        description="Maximum difference percentage found",
+        default=0.0,
+        min=0.0,
+        max=100.0
+    )
+    # Ajout des statistiques de textures
+    texture_result: bpy.props.PointerProperty(type=T4A_TextureResult)
+    # Ajout des statistiques UV
+    uv_result: bpy.props.PointerProperty(type=T4A_UVResult)
+    
+    # Topology analysis result
+    topology_result: bpy.props.PointerProperty(type=T4A_TopologyResult)
 
 
 def register_all():
     """Register property group and attach collection to Scene."""
+    try:
+        bpy.utils.register_class(T4A_UVResult)
+    except Exception:
+        pass
+    try:
+        bpy.utils.register_class(T4A_TextureResult)
+    except Exception:
+        pass
+    try:
+        bpy.utils.register_class(T4A_TopologyResult)
+    except Exception:
+        pass
     try:
         bpy.utils.register_class(T4A_DimResult)
     except Exception:
@@ -372,6 +553,18 @@ def unregister_all():
         pass
     try:
         bpy.utils.unregister_class(T4A_DimResult)
+    except Exception:
+        pass
+    try:
+        bpy.utils.unregister_class(T4A_TopologyResult)
+    except Exception:
+        pass
+    try:
+        bpy.utils.unregister_class(T4A_TextureResult)
+    except Exception:
+        pass
+    try:
+        bpy.utils.unregister_class(T4A_UVResult)
     except Exception:
         pass
 

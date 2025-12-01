@@ -53,7 +53,7 @@ class T4A_OT_InstallDependencies(bpy.types.Operator):
     # Comma-separated list of packages (simple UI)
     packages: bpy.props.StringProperty(
         name="Packages",
-        description="Liste séparée par des virgules des paquets à installer (ex: PyPDF2)",
+        description="Liste séparée par des virgules des paquets à installer (ex: PyPDF2). Note: mathutils est déjà inclus avec Blender",
         default="PyPDF2",
     )
 

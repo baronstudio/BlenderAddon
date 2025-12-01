@@ -32,6 +32,9 @@ from . import (
     PROD_Utilitaire,
     PROD_dimension_checker,
     PROD_prompt_manager,
+    PROD_texture_manager,
+    PROD_uv_analyzer,
+    PROD_topology_analyzer,
 )
 from . import PROD_dependency_installer
 
@@ -43,6 +46,9 @@ _MODULES = (
     PROD_Utilitaire,
     PROD_dimension_checker,
     PROD_prompt_manager,
+    PROD_texture_manager,
+    PROD_uv_analyzer,
+    PROD_topology_analyzer,
     PROD_panel_files,
     PROD_panel_checklist,
     PROD_panel_reviews,

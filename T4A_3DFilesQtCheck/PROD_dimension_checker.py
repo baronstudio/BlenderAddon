@@ -46,65 +46,136 @@ class _SimpleLogger:
 logger = _SimpleLogger()
 
 
-def compare_dimensions(ai_dims: Dict[str, float], bbox_dims: Dict[str, float], tolerance: float = 0.05) -> Dict[str, Any]:
-    """Compare AI dimensions with 3D model bounding box dimensions.
+def get_dimension_status(collection_name: str) -> dict:
+    """Obtient le statut des dimensions pour une collection donnée.
     
     Args:
-        ai_dims: Dict with 'width', 'height', 'depth' from AI analysis
-        bbox_dims: Dict with 'width', 'height', 'depth' from 3D model
-        tolerance: Tolerance threshold (default 5%)
+        collection_name: Nom de la collection
         
     Returns:
-        Dict with comparison results including 'match', 'differences', 'need_helper'
+        dict: {
+            'status': 'OK'|'WARNING'|'ERROR'|'NO_AI_DATA',
+            'difference': float (pourcentage),
+            'has_ai_dims': bool
+        }
     """
-    result = {
-        'match': True,
-        'differences': {},
-        'need_helper': False,
-        'max_difference': 0.0
-    }
-    
     try:
-        max_diff = 0.0
-        for key in ['width', 'height', 'depth']:
-            ai_val = ai_dims.get(key)
-            bbox_val = bbox_dims.get(key)
-            
-            if ai_val is not None and bbox_val is not None:
-                if bbox_val > 0:  # Avoid division by zero
-                    diff_percent = abs(ai_val - bbox_val) / bbox_val
-                    result['differences'][key] = {
-                        'ai': ai_val,
-                        'model': bbox_val,
-                        'diff_percent': diff_percent,
-                        'diff_absolute': abs(ai_val - bbox_val)
-                    }
-                    
-                    if diff_percent > tolerance:
-                        result['match'] = False
-                        max_diff = max(max_diff, diff_percent)
-                else:
-                    result['differences'][key] = {
-                        'ai': ai_val,
-                        'model': bbox_val,
-                        'diff_percent': float('inf'),
-                        'diff_absolute': abs(ai_val - bbox_val)
-                    }
-                    result['match'] = False
+        scene = bpy.context.scene
         
-        result['max_difference'] = max_diff
+        # Extraire le nom de base de la collection (enlever préfixe EXT_)
+        parts = collection_name.split('_', 1)
+        if len(parts) == 2:
+            base_name = parts[1]
+            stem = os.path.splitext(base_name)[0]
+        else:
+            base_name = collection_name
+            stem = os.path.splitext(collection_name)[0]
         
-        # Determine if helper box is needed
-        from . import PROD_Utilitaire
-        force_creation = getattr(PROD_Utilitaire, 'forceHelperBoxCreation', False)
-        result['need_helper'] = force_creation or not result['match']
+        # Chercher les données d'analyse correspondantes
+        dims_collection = getattr(scene, 't4a_dimensions', None)
+        if not dims_collection:
+            return {'status': 'NO_AI_DATA', 'difference': 0.0, 'has_ai_dims': False}
+        
+        # Trouver l'entrée correspondante
+        matching_item = None
+        for item in dims_collection:
+            item_name = item.name
+            if (stem in item_name or 
+                item_name.startswith(f"IMG_{stem}") or
+                item_name == base_name or
+                os.path.splitext(item_name)[0] == stem):
+                matching_item = item
+                break
+        
+        if not matching_item:
+            return {'status': 'NO_AI_DATA', 'difference': 0.0, 'has_ai_dims': False}
+        
+        # Vérifier si on a des données IA valides
+        dim_text = getattr(matching_item, 'dimensions', '') or ''
+        if not dim_text.strip() or 'NOT_FOUND' in dim_text.upper():
+            return {'status': 'NO_AI_DATA', 'difference': 0.0, 'has_ai_dims': False}
+        
+        # Retourner le statut stocké
+        status = getattr(matching_item, 'tolerance_status', 'NO_AI_DATA')
+        difference = getattr(matching_item, 'difference_percentage', 0.0)
+        
+        return {
+            'status': status,
+            'difference': difference,
+            'has_ai_dims': True
+        }
         
     except Exception as e:
-        logger.error("Error comparing dimensions: %s", e)
-        result['match'] = False
-        result['need_helper'] = True
+        logger.debug(f"Erreur lors de l'obtention du statut de dimension: {e}")
+        return {'status': 'NO_AI_DATA', 'difference': 0.0, 'has_ai_dims': False}
+
+
+def compare_dimensions(ai_dims: Dict[str, float], bbox_dims: Dict[str, float], tolerance: float = 0.05) -> Dict[str, Any]:
+    """Compare AI-analyzed dimensions with 3D model bounding box dimensions.
+    
+    Args:
+        ai_dims: Dictionary with 'width', 'height', 'depth' keys (can be None)
+        bbox_dims: Dictionary with 'width', 'height', 'depth' keys (all float)
+        tolerance: Tolerance threshold (0.05 = 5%)
         
-    return result
+    Returns:
+        Dict with 'match', 'need_helper', 'differences', 'max_difference', 'status', 'has_ai_data' keys
+    """
+    differences = {'width': None, 'height': None, 'depth': None}
+    valid_comparisons = 0
+    max_difference = 0.0
+    has_ai_data = False
+    
+    # Compare each dimension
+    for dim in ['width', 'height', 'depth']:
+        ai_val = ai_dims.get(dim)
+        bbox_val = bbox_dims.get(dim, 0.0)
+        
+        if ai_val is not None and ai_val > 0 and bbox_val > 0:
+            has_ai_data = True
+            valid_comparisons += 1
+            diff = abs(ai_val - bbox_val) / ai_val
+            differences[dim] = {
+                'ai': ai_val,
+                'model': bbox_val,
+                'diff_percent': diff,
+                'diff_absolute': abs(ai_val - bbox_val)
+            }
+            max_difference = max(max_difference, diff)
+    
+    # Determine overall match and status
+    if not has_ai_data:
+        return {
+            'match': True,  # No comparison possible
+            'need_helper': False,
+            'differences': differences,
+            'max_difference': 0.0,
+            'status': 'NO_AI_DATA',
+            'has_ai_data': False
+        }
+    
+    # Determine status based on max difference
+    is_within_tolerance = max_difference <= tolerance
+    
+    if is_within_tolerance:
+        status = 'OK'
+    elif max_difference <= tolerance * 2:  # Warning zone: 1x to 2x tolerance
+        status = 'WARNING'
+    else:  # Error zone: > 2x tolerance
+        status = 'ERROR'
+    
+    # Determine if helper box is needed
+    from . import PROD_Utilitaire
+    force_creation = getattr(PROD_Utilitaire, 'forceHelperBoxCreation', False)
+    
+    return {
+        'match': is_within_tolerance,
+        'need_helper': force_creation or not is_within_tolerance,  # Create helper if outside tolerance
+        'differences': differences,
+        'max_difference': max_difference,
+        'status': status,
+        'has_ai_data': has_ai_data
+    }
 
 
 class T4A_OT_CompareDimensions(bpy.types.Operator):
@@ -187,6 +258,29 @@ class T4A_OT_CompareDimensions(bpy.types.Operator):
                 pass
                 
             comparison = compare_dimensions(ai_dims, bbox_dims, tolerance=tolerance)
+            
+            # Stocker le statut dans l'item de dimension correspondant
+            try:
+                dims_collection = getattr(scene, 't4a_dimensions', None)
+                if dims_collection:
+                    # Extraire le nom de base de la collection
+                    parts = coll_name.split('_', 1)
+                    if len(parts) == 2:
+                        base_name = parts[1]
+                        stem = os.path.splitext(base_name)[0]
+                        
+                        # Trouver et mettre à jour l'entrée correspondante
+                        for item in dims_collection:
+                            item_name = item.name
+                            if (stem in item_name or 
+                                item_name.startswith(f"IMG_{stem}") or
+                                item_name == base_name or
+                                os.path.splitext(item_name)[0] == stem):
+                                item.tolerance_status = comparison['status']
+                                item.difference_percentage = comparison['max_difference'] * 100
+                                break
+            except Exception as e:
+                logger.debug(f"Erreur lors de la mise à jour du statut: {e}")
             
             logger.info("Comparaison pour %s:", coll_name)
             

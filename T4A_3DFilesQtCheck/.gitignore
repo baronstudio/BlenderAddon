@@ -51,3 +51,5 @@ Thumbs.db
 
 # Local editor/session files
 *.swp
+
+assets-test/

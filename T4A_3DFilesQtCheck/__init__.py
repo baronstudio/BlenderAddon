@@ -35,6 +35,8 @@ from . import (
     PROD_texture_manager,
     PROD_uv_analyzer,
     PROD_topology_analyzer,
+    PROD_texel_density,
+    PROD_dimension_analyzer,
 )
 from . import PROD_dependency_installer
 
@@ -49,6 +51,8 @@ _MODULES = (
     PROD_texture_manager,
     PROD_uv_analyzer,
     PROD_topology_analyzer,
+    PROD_texel_density,
+    PROD_dimension_analyzer,
     PROD_panel_files,
     PROD_panel_checklist,
     PROD_panel_reviews,

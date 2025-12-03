@@ -430,6 +430,31 @@ class T4A_OT_ImportFileToCollection(bpy.types.Operator):
                         
                         logger.info("[T4A] Analyse UV réussie: %d objets, %d couches UV", 
                                    uv_result['analyzed_objects'], summary['total_uv_layers'])
+                        
+                        # Analyser le Texel Density si l'analyse UV a réussi
+                        try:
+                            from . import PROD_texel_density
+                            logger.info("[T4A] Début analyse texel density pour: %s", base)
+                            
+                            texel_result = PROD_texel_density.analyze_collection_texel_density(coll, context)
+                            
+                            if texel_result['summary']['analysis_success']:
+                                # Stocker les résultats dans uv_result
+                                uv_res.has_texel_analysis = True
+                                uv_res.average_texel_density = texel_result['summary']['average_density']
+                                uv_res.min_texel_density = texel_result['summary']['min_density']
+                                uv_res.max_texel_density = texel_result['summary']['max_density']
+                                uv_res.texel_density_variance = texel_result['summary']['global_variance']
+                                uv_res.texel_density_status = texel_result['summary']['density_status']
+                                
+                                logger.info("[T4A] Analyse texel density réussie: %.1f px/cm (variance: %.1f%%)",
+                                           uv_res.average_texel_density, uv_res.texel_density_variance)
+                            else:
+                                logger.error("[T4A] Erreur analyse texel density: %s", 
+                                           texel_result['summary']['analysis_error'])
+                        
+                        except Exception as e:
+                            logger.error("[T4A] Erreur analyse texel density: %s", e)
                     else:
                         uv_res.analysis_success = False
                         uv_res.analysis_error = summary.get('analysis_error', 'Erreur inconnue')
@@ -1223,8 +1248,43 @@ class T4A_OT_AnalyzeTextFile(bpy.types.Operator):
                         item.name = base_name
                         item.expanded = False
                     
-                    # Mettre à jour les dimensions
-                    item.dimensions = detail_str
+                    # === NOUVELLE LOGIQUE: Utiliser le système amélioré ===
+                    # Mettre à jour les dimensions IA
+                    item.dimensions = detail_str  # Garder pour compatibilité
+                    item.ai_dimensions = detail_str
+                    item.ai_analysis_success = True
+                    item.ai_analysis_error = ""
+                    
+                    # Essayer de calculer les dimensions de la scène si une collection existe
+                    try:
+                        from . import PROD_dimension_analyzer
+                        
+                        # Chercher la collection correspondante
+                        collection_name = ""
+                        for coll in bpy.data.collections:
+                            if file_stem in coll.name:
+                                collection_name = coll.name
+                                break
+                        
+                        if collection_name:
+                            # Effectuer l'analyse complète
+                            analysis_result = PROD_dimension_analyzer.analyze_collection_dimensions(
+                                collection_name, detail_str
+                            )
+                            
+                            # Mettre à jour le résultat avec toutes les nouvelles propriétés
+                            PROD_dimension_analyzer.update_dimension_result(item, analysis_result)
+                            
+                            logger.info(f'[T4A] Analyse dimensions complète effectuée pour {collection_name}')
+                        else:
+                            # Pas de collection trouvée, juste marquer l'IA comme réussie
+                            item.tolerance_status = 'NO_AI_DATA'
+                            logger.info(f'[T4A] Aucune collection trouvée pour {file_stem}, IA seule mise à jour')
+                            
+                    except Exception as analysis_error:
+                        # En cas d'erreur d'analyse, au moins marquer l'IA comme réussie
+                        item.ai_analysis_error = f"Erreur analyse auto: {str(analysis_error)[:50]}"
+                        logger.warning(f'[T4A] Erreur analyse auto dimensions: {analysis_error}')
             except Exception:
                 pass
 
@@ -1380,8 +1440,17 @@ class T4A_OT_AnalyzeImageFileForDimensions(bpy.types.Operator):
                         item.name = f"IMG_{base_name}"
                         item.expanded = False
                     
-                    # Mettre à jour les dimensions
-                    item.dimensions = detail_str
+                    # === NOUVELLE LOGIQUE: Utiliser le système amélioré ===
+                    # Mettre à jour les dimensions IA (analyse d'image)
+                    item.dimensions = detail_str  # Garder pour compatibilité
+                    item.ai_dimensions = detail_str
+                    item.ai_analysis_success = True
+                    item.ai_analysis_error = ""
+                    
+                    # Pour les images, pas de collection 3D associée généralement
+                    # Marquer comme données IA uniquement
+                    item.tolerance_status = 'NO_AI_DATA'  # Pas de comparaison possible
+                    item.scene_dimensions = "Image - pas de modèle 3D"
                 
                 self.report({'INFO'}, f'Image analyzed for dimensions: {os.path.basename(filepath)}')
                 

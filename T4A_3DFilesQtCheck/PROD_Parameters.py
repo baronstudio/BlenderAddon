@@ -209,6 +209,25 @@ Provide detailed analysis focusing on 3D modeling requirements.""",
         description="Inclure l'analyse des vertex colors dans l'analyse topologique",
         default=True
     )
+    
+    # --- PARAMÈTRES TEXEL DENSITY ---
+    texel_density_target: bpy.props.FloatProperty(
+        name="Densité Cible (px/cm)",
+        description="Densité de texel cible pour le projet (pixels par cm)",
+        default=10.24,  # Standard pour jeux mobiles
+        min=0.1,
+        max=100.0,
+        precision=2
+    )
+    
+    texel_variance_threshold: bpy.props.FloatProperty(
+        name="Seuil Variance (%)",
+        description="Variance maximale acceptable pour la densité de texel",
+        default=20.0,
+        min=5.0,
+        max=100.0,
+        precision=1
+    )
 
     # Note: Vertex/Service Account mode removed in favor of google-generativeai (API key)
 
@@ -298,6 +317,16 @@ Provide detailed analysis focusing on 3D modeling requirements.""",
         row.prop(self, "uv_grid_resolution")
         
         uv_box.prop(self, "uv_square_tolerance")
+
+        layout.separator()
+
+        # --- PARAMÈTRES TEXEL DENSITY ---
+        texel_box = layout.box()
+        texel_box.label(text="Paramètres Texel Density", icon='TEXTURE')
+        
+        row = texel_box.row()
+        row.prop(self, "texel_density_target")
+        row.prop(self, "texel_variance_threshold")
 
         layout.separator()
 
@@ -436,6 +465,21 @@ class T4A_UVResult(bpy.types.PropertyGroup):
     uv_layers_count: bpy.props.IntProperty(name="Couches UV", default=0)
     analysis_success: bpy.props.BoolProperty(name="Analyse Réussie", default=False)
     analysis_error: bpy.props.StringProperty(name="Erreur", default="")
+    
+    # Texel Density
+    has_texel_analysis: bpy.props.BoolProperty(name="Analyse Texel Density", default=False)
+    average_texel_density: bpy.props.FloatProperty(name="Densité Moyenne (px/cm)", default=0.0)
+    min_texel_density: bpy.props.FloatProperty(name="Densité Min", default=0.0)
+    max_texel_density: bpy.props.FloatProperty(name="Densité Max", default=0.0)
+    texel_density_variance: bpy.props.FloatProperty(name="Variance Densité (%)", default=0.0)
+    texel_density_status: bpy.props.EnumProperty(
+        items=[
+            ('GOOD', 'Bon', 'Densité uniforme'),
+            ('WARNING', 'Attention', 'Variance modérée'),
+            ('ERROR', 'Problème', 'Variance excessive')
+        ],
+        default='GOOD'
+    )
 
 
 class T4A_TopologyResult(bpy.types.PropertyGroup):
@@ -492,17 +536,32 @@ class T4A_TextureResult(bpy.types.PropertyGroup):
 
 
 class T4A_DimResult(bpy.types.PropertyGroup):
+    """Stocke les résultats d'analyse des dimensions pour un modèle."""
     name: bpy.props.StringProperty(name="File Name")
-    dimensions: bpy.props.StringProperty(name="Dimensions", default="")
+    dimensions: bpy.props.StringProperty(name="Dimensions", default="")  # Gardé pour compatibilité
     expanded: bpy.props.BoolProperty(name="Expanded", default=False)
-    # Ajout du statut de tolérance
+    
+    # === NOUVELLES PROPRIÉTÉS SÉPARÉES ===
+    # Dimensions IA (depuis document analysé)
+    ai_dimensions: bpy.props.StringProperty(name="Dimensions IA", default="")
+    ai_analysis_success: bpy.props.BoolProperty(name="IA Réussie", default=False)
+    ai_analysis_error: bpy.props.StringProperty(name="Erreur IA", default="")
+    
+    # Dimensions réelles 3D (depuis le modèle dans la scène)
+    scene_dimensions: bpy.props.StringProperty(name="Dimensions Scène", default="")
+    scene_width: bpy.props.FloatProperty(name="Largeur Scène", default=0.0)
+    scene_height: bpy.props.FloatProperty(name="Hauteur Scène", default=0.0)
+    scene_depth: bpy.props.FloatProperty(name="Profondeur Scène", default=0.0)
+    
+    # Statut de tolérance et comparaison
     tolerance_status: bpy.props.EnumProperty(
         name="Tolerance Status",
         items=[
             ('OK', 'OK', 'Dimensions within tolerance'),
             ('WARNING', 'Warning', 'Dimensions outside tolerance'),
             ('ERROR', 'Error', 'Critical dimension difference'),
-            ('NO_AI_DATA', 'No Data', 'No AI dimension data available')
+            ('NO_AI_DATA', 'No Data', 'No AI dimension data available'),
+            ('AI_ERROR', 'AI Error', 'AI analysis failed')
         ],
         default='NO_AI_DATA'
     )

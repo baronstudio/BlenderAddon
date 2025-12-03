@@ -76,24 +76,275 @@ class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
                     if item.expanded:
                         sub = layout.box()
                         
-                        # === DIMENSIONS SECTION ===
+                        # === DIMENSIONS SECTION AMÉLIORÉE ===
                         dim_box = sub.box()
                         dim_box.label(text="Dimensions:", icon='DRIVER_DISTANCE')
+                        
                         try:
-                            dtext = (item.dimensions or '').strip()
-                            if not dtext:
-                                dim_box.label(text="(empty)")
+                            # Récupérer l'unité de la scène (déjà calculée en haut du panel)
+                            scene = context.scene
+                            unit_system = getattr(scene, 't4a_unit_system', None)
+                            if not unit_system:
+                                try:
+                                    us = scene.unit_settings
+                                    unit_system = getattr(us, 'system', 'METRIC')
+                                except Exception:
+                                    unit_system = 'METRIC'
+                            
+                            # Déterminer l'unité d'affichage et la précision
+                            if unit_system == 'IMPERIAL':
+                                unit_display = "in"
+                                precision = 3  # 3 décimales pour l'impérial
+                                volume_unit_cubic = "in³"
+                            else:  # METRIC ou autre
+                                # Récupérer l'unité de longueur réelle
+                                try:
+                                    us = scene.unit_settings
+                                    length_unit = getattr(us, 'length_unit', 'CENTIMETERS')
+                                    # Mapper les unités Blender vers l'affichage
+                                    unit_mapping = {
+                                        'KILOMETERS': 'km',
+                                        'METERS': 'm',
+                                        'CENTIMETERS': 'cm',
+                                        'MILLIMETERS': 'mm',
+                                        'MICROMETERS': 'µm'
+                                    }
+                                    unit_display = unit_mapping.get(length_unit, 'cm')
+                                    # Unité de volume correspondante
+                                    volume_mapping = {
+                                        'km': 'km³',
+                                        'm': 'm³', 
+                                        'cm': 'cm³',
+                                        'mm': 'mm³',
+                                        'µm': 'µm³'
+                                    }
+                                    volume_unit_cubic = volume_mapping.get(unit_display, 'cm³')
+                                except Exception:
+                                    unit_display = "cm"
+                                    volume_unit_cubic = "cm³"
+                                precision = 2  # 2 décimales pour le métrique
+                            
+                            # Gestion du statut de tolérance (couleur de fond)
+                            tolerance_status = getattr(item, 'tolerance_status', 'NO_AI_DATA')
+                            
+                            # Créer une ligne avec deux colonnes
+                            dim_row = dim_box.row()
+                            
+                            # === COLONNE GAUCHE: DIMENSIONS MODÈLE 3D RÉELLES ===
+                            left_col = dim_row.column()
+                            left_col.scale_x = 0.5
+                            
+                            left_header = left_col.box()
+                            left_header.label(text="Modèle 3D (BBox)", icon='MESH_CUBE')
+                            
+                            # Récupérer les dimensions réelles de la collection
+                            file_name = item.name
+                            collection_name = ""
+                            actual_dimensions = None
+                            
+                            # Trouver la collection correspondante
+                            for coll in bpy.data.collections:
+                                if file_name in coll.name or coll.name in file_name:
+                                    collection_name = coll.name
+                                    break
+                            
+                            if collection_name:
+                                # Calculer les dimensions de la bounding box
+                                try:
+                                    collection = bpy.data.collections.get(collection_name)
+                                    if collection and collection.objects:
+                                        # Récupérer les objets mesh de la collection
+                                        mesh_objects = [obj for obj in collection.objects if obj.type == 'MESH' and obj.data]
+                                        
+                                        if mesh_objects:
+                                            from mathutils import Vector
+                                            
+                                            # Calculer la bounding box globale
+                                            min_coords = Vector((float('inf'), float('inf'), float('inf')))
+                                            max_coords = Vector((float('-inf'), float('-inf'), float('-inf')))
+                                            
+                                            for obj in mesh_objects:
+                                                bbox_corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+                                                for corner in bbox_corners:
+                                                    for i in range(3):
+                                                        min_coords[i] = min(min_coords[i], corner[i])
+                                                        max_coords[i] = max(max_coords[i], corner[i])
+                                            
+                                            # Calculer les dimensions
+                                            dimensions = max_coords - min_coords
+                                            
+                                            # Appliquer l'échelle de la scène si nécessaire
+                                            scene = context.scene
+                                            scale_factor = getattr(scene, 't4a_scale_length', 1.0)
+                                            if isinstance(scale_factor, (int, float)) and scale_factor != 1.0:
+                                                dimensions *= scale_factor
+                                            
+                                            actual_dimensions = (dimensions.x, dimensions.y, dimensions.z)
+                                except Exception as calc_error:
+                                    print(f"Erreur calcul dimensions: {calc_error}")
+                            
+                            # Affichage des dimensions réelles
+                            if actual_dimensions:
+                                left_col.label(text=f"L: {actual_dimensions[0]:.{precision}f} {unit_display}")
+                                left_col.label(text=f"H: {actual_dimensions[1]:.{precision}f} {unit_display}")
+                                left_col.label(text=f"P: {actual_dimensions[2]:.{precision}f} {unit_display}")
+                                # Afficher le volume avec unité appropriée
+                                volume = actual_dimensions[0] * actual_dimensions[1] * actual_dimensions[2]
+                                if unit_system == 'IMPERIAL':
+                                    # Volume en cubic inches
+                                    if volume > 61.024:  # 1 litre = 61.024 cubic inches
+                                        left_col.label(text=f"Vol: {volume/61.024:.1f} L", icon='INFO')
+                                    else:
+                                        left_col.label(text=f"Vol: {volume:.1f} {volume_unit_cubic}", icon='INFO')
+                                else:
+                                    # Volume métrique - adapter selon l'unité
+                                    if unit_display == 'cm' and volume > 1000:
+                                        left_col.label(text=f"Vol: {volume/1000:.1f} L", icon='INFO')
+                                    elif unit_display == 'm' and volume > 0.001:
+                                        left_col.label(text=f"Vol: {volume*1000:.1f} L", icon='INFO')
+                                    else:
+                                        left_col.label(text=f"Vol: {volume:.1f} {volume_unit_cubic}", icon='INFO')
                             else:
-                                # split on semicolons or newlines and show one value per line
-                                parts = [p.strip() for p in re.split(r"[;\n]+", dtext) if p.strip()]
+                                # Fallback: essayer d'utiliser les valeurs stockées
+                                scene_width = getattr(item, 'scene_width', 0.0)
+                                scene_height = getattr(item, 'scene_height', 0.0)
+                                scene_depth = getattr(item, 'scene_depth', 0.0)
+                                
+                                if scene_width > 0 or scene_height > 0 or scene_depth > 0:
+                                    left_col.label(text=f"L: {scene_width:.{precision}f} {unit_display}")
+                                    left_col.label(text=f"H: {scene_height:.{precision}f} {unit_display}")
+                                    left_col.label(text=f"P: {scene_depth:.{precision}f} {unit_display}")
+                                else:
+                                    na_box = left_col.box()
+                                    na_box.enabled = False
+                                    na_box.label(text="Modèle introuvable", icon='ERROR')
+                                    if collection_name:
+                                        na_box.label(text=f"Collection: {collection_name[:15]}")
+                                    else:
+                                        na_box.label(text="Aucune collection")
+                            
+                            # === COLONNE DROITE: DIMENSIONS IA ===
+                            right_col = dim_row.column()
+                            right_col.scale_x = 0.5
+                            
+                            right_header = right_col.box()
+                            right_header.label(text="Dimensions IA", icon='FILE_TEXT')
+                            
+                            # Contenu IA dimensions
+                            ai_success = getattr(item, 'ai_analysis_success', False)
+                            ai_dimensions = getattr(item, 'ai_dimensions', '').strip()
+                            ai_error = getattr(item, 'ai_analysis_error', '').strip()
+                            
+                            if ai_success and ai_dimensions:
+                                # Affichage des dimensions IA trouvées
+                                parts = [p.strip() for p in re.split(r"[;\n]+", ai_dimensions) if p.strip()]
                                 if len(parts) > 1:
                                     for p in parts:
-                                        dim_box.label(text=p)
+                                        right_col.label(text=p)
                                 else:
-                                    # fallback single-line display
-                                    dim_box.label(text=dtext)
-                        except Exception:
-                            dim_box.label(text=f"Dimensions: {item.dimensions}")
+                                    right_col.label(text=ai_dimensions)
+                            elif ai_error:
+                                # Erreur d'analyse IA
+                                error_box = right_col.box()
+                                error_box.alert = True
+                                error_box.label(text="Erreur IA:", icon='ERROR')
+                                # Limiter le texte d'erreur
+                                error_text = ai_error[:30] + "..." if len(ai_error) > 30 else ai_error
+                                error_box.label(text=error_text)
+                            else:
+                                # Fallback: utiliser l'ancienne propriété dimensions
+                                dtext = (item.dimensions or '').strip()
+                                if dtext:
+                                    parts = [p.strip() for p in re.split(r"[;\n]+", dtext) if p.strip()]
+                                    if len(parts) > 1:
+                                        for p in parts:
+                                            right_col.label(text=p)
+                                    else:
+                                        right_col.label(text=dtext)
+                                else:
+                                    # Pas de données IA du tout
+                                    na_box = right_col.box()
+                                    na_box.enabled = False
+                                    na_box.label(text="Non disponible", icon='QUESTION')
+                            
+                            # === LIGNE DE STATUT DE COMPARAISON ===
+                            # Calculer la comparaison en temps réel si on a les deux dimensions
+                            if actual_dimensions and ai_success and ai_dimensions:
+                                # Essayer de parser les dimensions IA pour la comparaison
+                                try:
+                                    from . import PROD_dimension_analyzer
+                                    ai_parsed = PROD_dimension_analyzer.parse_ai_dimensions(ai_dimensions)
+                                    
+                                    if ai_parsed:
+                                        # Calculer la différence en temps réel
+                                        diff_percent = PROD_dimension_analyzer.calculate_dimension_difference(ai_parsed, actual_dimensions)
+                                        real_status = PROD_dimension_analyzer.determine_tolerance_status(diff_percent)
+                                        
+                                        status_row = dim_box.row()
+                                        
+                                        if real_status == 'OK':
+                                            status_row.label(text=f"✓ Tolérance OK ({diff_percent:.1f}%)", icon='CHECKMARK')
+                                        elif real_status == 'WARNING':
+                                            warn_box = status_row.box()
+                                            warn_box.alert = True
+                                            warn_box.label(text=f"⚠ Écart {diff_percent:.1f}%", icon='ERROR')
+                                        elif real_status == 'ERROR':
+                                            error_box = status_row.box()
+                                            error_box.alert = True
+                                            error_box.label(text=f"✗ Écart critique {diff_percent:.1f}%", icon='CANCEL')
+                                except Exception:
+                                    # Fallback vers les valeurs stockées si le calcul échoue
+                                    if tolerance_status in ['OK', 'WARNING', 'ERROR']:
+                                        status_row = dim_box.row()
+                                        diff_percentage = getattr(item, 'difference_percentage', 0.0)
+                                        
+                                        if tolerance_status == 'OK':
+                                            status_row.label(text=f"✓ Tolérance OK ({diff_percentage:.1f}%)", icon='CHECKMARK')
+                                        elif tolerance_status == 'WARNING':
+                                            warn_box = status_row.box()
+                                            warn_box.alert = True
+                                            warn_box.label(text=f"⚠ Écart {diff_percentage:.1f}%", icon='ERROR')
+                                        elif tolerance_status == 'ERROR':
+                                            error_box = status_row.box()
+                                            error_box.alert = True
+                                            error_box.label(text=f"✗ Écart critique {diff_percentage:.1f}%", icon='CANCEL')
+                            elif tolerance_status in ['OK', 'WARNING', 'ERROR'] and ai_success:
+                                # Utiliser les valeurs stockées comme fallback
+                                status_row = dim_box.row()
+                                diff_percentage = getattr(item, 'difference_percentage', 0.0)
+                                
+                                if tolerance_status == 'OK':
+                                    status_row.label(text=f"✓ Tolérance OK ({diff_percentage:.1f}%)", icon='CHECKMARK')
+                                elif tolerance_status == 'WARNING':
+                                    warn_box = status_row.box()
+                                    warn_box.alert = True
+                                    warn_box.label(text=f"⚠ Écart {diff_percentage:.1f}%", icon='ERROR')
+                                elif tolerance_status == 'ERROR':
+                                    error_box = status_row.box()
+                                    error_box.alert = True
+                                    error_box.label(text=f"✗ Écart critique {diff_percentage:.1f}%", icon='CANCEL')
+                            
+                            # === BOUTON DE RECALCUL ===
+                            recalc_row = dim_box.row()
+                            recalc_op = recalc_row.operator("t4a.recalculate_dimensions", 
+                                                          text="Recalculer Dimensions", 
+                                                          icon='FILE_REFRESH')
+                            
+                            # Assigner le nom de collection au bouton
+                            file_name = item.name
+                            collection_name = ""
+                            for coll in bpy.data.collections:
+                                if file_name in coll.name:
+                                    collection_name = coll.name
+                                    break
+                            if collection_name:
+                                recalc_op.collection_name = collection_name
+                                    
+                        except Exception as e:
+                            # Fallback en cas d'erreur
+                            dim_box.alert = True
+                            dim_box.label(text="Erreur d'affichage des dimensions")
+                            dim_box.label(text=str(e)[:50])
                         
                         # === TEXTURES SECTION (dans le même sub-panel) ===
                         tex_box = sub.box()
@@ -242,15 +493,6 @@ class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
                         topology_box = sub.box()
                         topology_box.label(text="Topologie:", icon='MESH_DATA')
                         
-                        # Debug: log des propriétés pour identifier le problème
-                        try:
-                            has_attr = hasattr(item, 'topology_result')
-                            topo_obj = getattr(item, 'topology_result', None) if has_attr else None
-                            success = topo_obj.analysis_success if topo_obj else False
-                            print(f"[DEBUG PANEL] Item '{item.name}': has_topology_result={has_attr}, obj_exists={topo_obj is not None}, success={success}")
-                        except Exception as e:
-                            print(f"[DEBUG PANEL] Erreur debug pour '{item.name}': {e}")
-                        
                         if hasattr(item, 'topology_result'):
                             topo_res = item.topology_result
                             
@@ -337,6 +579,57 @@ class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
                             init_topo_op = init_row.operator("t4a.analyze_topology", text="Analyser Topologie")
                             if collection_name:
                                 init_topo_op.collection_name = collection_name
+                        
+                        # === TEXEL DENSITY SECTION ===
+                        texel_box = sub.box()
+                        texel_box.label(text="Texel Density:", icon='TEXTURE')
+                        
+                        # Vérifier si les UVs ont été analysées (prérequis pour texel density)
+                        uv_analyzed = hasattr(item, 'uv_result') and item.uv_result and item.uv_result.analysis_success
+                        
+                        if uv_analyzed and hasattr(item, 'uv_result') and item.uv_result.has_texel_analysis:
+                            uv_res = item.uv_result
+                            
+                            if uv_res.has_texel_analysis:
+                                # Row 1: Densité moyenne et variance - utiliser l'unité de la scène
+                                row1 = texel_box.row()
+                                row1.label(text=f"Moyenne: {uv_res.average_texel_density:.1f} px/{unit_display}")
+                                
+                                # Afficher le statut avec l'icône appropriée
+                                if uv_res.texel_density_status == 'GOOD':
+                                    row1.label(text=f"Variance: {uv_res.texel_density_variance:.1f}%", icon='CHECKMARK')
+                                elif uv_res.texel_density_status == 'WARNING':
+                                    row1.label(text=f"Variance: {uv_res.texel_density_variance:.1f}%", icon='INFO')
+                                else:  # ERROR
+                                    row1.label(text=f"Variance: {uv_res.texel_density_variance:.1f}%", icon='ERROR')
+                                
+                                # Row 2: Min/Max densités - utiliser l'unité de la scène
+                                row2 = texel_box.row()
+                                row2.label(text=f"Min: {uv_res.min_texel_density:.1f} px/{unit_display}")
+                                row2.label(text=f"Max: {uv_res.max_texel_density:.1f} px/{unit_display}")
+                                
+                                # Row 3: Bouton re-analyser
+                                btn_row = texel_box.row()
+                                texel_btn_op = btn_row.operator("t4a.analyze_texel_density", text="Re-analyser Texel Density")
+                                if collection_name:
+                                    texel_btn_op.collection_name = collection_name
+                        
+                        elif uv_analyzed:
+                            # UVs analysées mais pas de texel density
+                            texel_box.label(text="Analyse non effectuée")
+                            
+                            # Bouton pour lancer l'analyse
+                            init_row = texel_box.row()
+                            init_texel_op = init_row.operator("t4a.analyze_texel_density", text="Analyser Texel Density")
+                            if collection_name:
+                                init_texel_op.collection_name = collection_name
+                        
+                        else:
+                            # UVs non analysées - prérequis manquant
+                            texel_box.alert = True
+                            texel_box.label(text="Analyse UV requise d'abord", icon='ERROR')
+                            texel_box.label(text="Analysez les UVs avant le Texel Density")
+                            
             else:
                 layout.label(text="No dimension results available")
         except Exception:

@@ -292,6 +292,28 @@ class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
                                             error_box = status_row.box()
                                             error_box.alert = True
                                             error_box.label(text=f"✗ Écart critique {diff_percent:.1f}%", icon='CANCEL')
+                                        
+                                        # Affichage des informations de permutation si disponibles
+                                        permutation_applied = getattr(item, 'permutation_applied', False)
+                                        if permutation_applied:
+                                            mapping_method = getattr(item, 'mapping_method', 'auto_permutation')
+                                            confidence = getattr(item, 'confidence_level', 'LOW')
+                                            original_diff = getattr(item, 'original_difference', 0.0)
+                                            
+                                            perm_row = dim_box.row()
+                                            perm_row.scale_y = 0.8
+                                            
+                                            # Icône selon le niveau de confiance
+                                            confidence_icon = {'HIGH': 'CHECKMARK', 'MEDIUM': 'ERROR', 'LOW': 'CANCEL'}.get(confidence, 'QUESTION')
+                                            confidence_color = confidence == 'HIGH'
+                                            
+                                            if confidence_color:
+                                                perm_row.label(text=f"🔄 Permutation appliquée ({original_diff:.1f}% → {diff_percent:.1f}%)", icon=confidence_icon)
+                                            else:
+                                                warn_perm = perm_row.box()
+                                                warn_perm.alert = confidence == 'LOW'
+                                                warn_perm.label(text=f"🔄 Permutation ({original_diff:.1f}% → {diff_percent:.1f}%) - Confiance: {confidence}", icon=confidence_icon)
+                                                
                                 except Exception:
                                     # Fallback vers les valeurs stockées si le calcul échoue
                                     if tolerance_status in ['OK', 'WARNING', 'ERROR']:
@@ -308,6 +330,16 @@ class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
                                             error_box = status_row.box()
                                             error_box.alert = True
                                             error_box.label(text=f"✗ Écart critique {diff_percentage:.1f}%", icon='CANCEL')
+                                        
+                                        # Affichage des informations de permutation depuis les données stockées
+                                        permutation_applied = getattr(item, 'permutation_applied', False)
+                                        if permutation_applied:
+                                            perm_row = dim_box.row()
+                                            perm_row.scale_y = 0.8
+                                            original_diff = getattr(item, 'original_difference', 0.0)
+                                            confidence = getattr(item, 'confidence_level', 'LOW')
+                                            perm_row.label(text=f"🔄 Permutation: {original_diff:.1f}% → {diff_percentage:.1f}% (Confiance: {confidence})")
+                                            
                             elif tolerance_status in ['OK', 'WARNING', 'ERROR'] and ai_success:
                                 # Utiliser les valeurs stockées comme fallback
                                 status_row = dim_box.row()
@@ -323,12 +355,37 @@ class T4A_PT_PROD_FilesReviews(bpy.types.Panel):
                                     error_box = status_row.box()
                                     error_box.alert = True
                                     error_box.label(text=f"✗ Écart critique {diff_percentage:.1f}%", icon='CANCEL')
+                                
+                                # Affichage des informations de permutation stockées
+                                permutation_applied = getattr(item, 'permutation_applied', False)
+                                if permutation_applied:
+                                    perm_row = dim_box.row()
+                                    perm_row.scale_y = 0.8
+                                    original_diff = getattr(item, 'original_difference', 0.0)
+                                    confidence = getattr(item, 'confidence_level', 'LOW')
+                                    perm_row.label(text=f"🔄 Permutation appliquée: {original_diff:.1f}% → {diff_percentage:.1f}% (Confiance: {confidence})")
                             
-                            # === BOUTON DE RECALCUL ===
+                            # === BOUTON DE RECALCUL INTELLIGENT ===
                             recalc_row = dim_box.row()
+                            recalc_row.scale_y = 1.2
+                            
+                            # Déterminer l'icône et le texte selon la situation
+                            has_permutation = getattr(item, 'permutation_applied', False)
+                            confidence = getattr(item, 'confidence_level', 'LOW')
+                            
+                            if has_permutation and confidence == 'HIGH':
+                                btn_icon = 'CHECKMARK'
+                                btn_text = "Optimisé"
+                            elif has_permutation:
+                                btn_icon = 'FILE_REFRESH'
+                                btn_text = "Réoptimiser"
+                            else:
+                                btn_icon = 'MODIFIER'
+                                btn_text = "Optimiser Mapping"
+                            
                             recalc_op = recalc_row.operator("t4a.recalculate_dimensions", 
-                                                          text="Recalculer Dimensions", 
-                                                          icon='FILE_REFRESH')
+                                                          text=btn_text, 
+                                                          icon=btn_icon)
                             
                             # Assigner le nom de collection au bouton
                             file_name = item.name

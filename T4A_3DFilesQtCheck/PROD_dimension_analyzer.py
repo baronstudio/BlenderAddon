@@ -8,6 +8,130 @@ import bmesh
 from mathutils import Vector
 import re
 from typing import Tuple, Optional, Dict, Any
+import itertools
+
+
+def find_best_dimension_mapping(ai_dims: Tuple[float, float, float], 
+                               model_dims: Tuple[float, float, float]) -> Dict[str, Any]:
+    """
+    Trouve le meilleur mapping entre dimensions IA et modèle en testant toutes les permutations.
+    
+    Args:
+        ai_dims: Dimensions IA (largeur, hauteur, profondeur)
+        model_dims: Dimensions modèle 3D (X, Y, Z)
+        
+    Returns:
+        {
+            'mapping': [(0,1), (1,2), (2,0)],  # Index mapping
+            'difference_percentage': 2.3,
+            'permutation_used': True,
+            'method': 'best_permutation'
+        }
+    """
+    try:
+        best_diff = float('inf')
+        best_mapping = None
+        
+        # Générer toutes les permutations possibles des indices (0,1,2)
+        permutations = list(itertools.permutations([0, 1, 2]))
+        
+        for perm in permutations:
+            # Appliquer la permutation aux dimensions modèle
+            reordered_model = tuple(model_dims[i] for i in perm)
+            
+            # Calculer la différence avec cette permutation
+            diff = calculate_dimension_difference(ai_dims, reordered_model)
+            
+            if diff < best_diff:
+                best_diff = diff
+                best_mapping = perm
+        
+        return {
+            'mapping': best_mapping,
+            'difference_percentage': best_diff,
+            'permutation_used': best_mapping != (0, 1, 2),
+            'method': 'best_permutation'
+        }
+        
+    except Exception as e:
+        print(f"Erreur find_best_dimension_mapping: {e}")
+        return {
+            'mapping': (0, 1, 2),  # Fallback identité
+            'difference_percentage': 100.0,
+            'permutation_used': False,
+            'method': 'error_fallback'
+        }
+
+
+def smart_dimension_analysis(ai_text: str, ai_dims: Tuple[float, float, float],
+                           model_dims: Tuple[float, float, float], 
+                           auto_threshold: float = 0.01) -> Dict[str, Any]:
+    """
+    Analyse intelligente avec permutation automatique si écart trop important.
+    
+    Args:
+        ai_text: Texte IA original
+        ai_dims: Dimensions parsed de l'IA
+        model_dims: Dimensions du modèle 3D
+        auto_threshold: Seuil d'écart (en fraction) déclenchant la permutation auto
+        
+    Returns:
+        {
+            'original_difference': 25.4,
+            'best_difference': 2.1,
+            'mapping_used': [(0,2), (1,1), (2,0)],
+            'permutation_applied': True,
+            'confidence': 'HIGH',
+            'method': 'auto_permutation'
+        }
+    """
+    try:
+        # 1. Calcul de l'écart original (mapping direct)
+        original_diff = calculate_dimension_difference(ai_dims, model_dims)
+        
+        # 2. Vérifier si permutation nécessaire
+        if original_diff <= auto_threshold * 100:  # Convertir en pourcentage
+            # Écart acceptable, pas de permutation
+            return {
+                'original_difference': original_diff,
+                'best_difference': original_diff,
+                'mapping_used': (0, 1, 2),
+                'permutation_applied': False,
+                'confidence': 'HIGH',
+                'method': 'direct_mapping'
+            }
+        
+        # 3. Chercher le meilleur mapping par permutation
+        mapping_result = find_best_dimension_mapping(ai_dims, model_dims)
+        
+        # 4. Déterminer le niveau de confiance
+        best_diff = mapping_result['difference_percentage']
+        if best_diff <= 5.0:
+            confidence = 'HIGH'
+        elif best_diff <= 15.0:
+            confidence = 'MEDIUM'
+        else:
+            confidence = 'LOW'
+        
+        return {
+            'original_difference': original_diff,
+            'best_difference': best_diff,
+            'mapping_used': mapping_result['mapping'],
+            'permutation_applied': mapping_result['permutation_used'],
+            'confidence': confidence,
+            'method': 'auto_permutation' if mapping_result['permutation_used'] else 'direct_mapping'
+        }
+        
+    except Exception as e:
+        print(f"Erreur smart_dimension_analysis: {e}")
+        return {
+            'original_difference': 100.0,
+            'best_difference': 100.0, 
+            'mapping_used': (0, 1, 2),
+            'permutation_applied': False,
+            'confidence': 'LOW',
+            'method': 'error_fallback'
+        }
 
 
 def calculate_collection_dimensions(collection_name: str) -> Tuple[float, float, float]:
@@ -178,14 +302,15 @@ def determine_tolerance_status(difference_percentage: float,
 
 def analyze_collection_dimensions(collection_name: str, ai_dimensions_text: str = "") -> Dict[str, Any]:
     """
-    Analyse complète des dimensions d'une collection avec comparaison IA.
+    Analyse intelligente des dimensions d'une collection avec auto-permutation.
     
     Args:
         collection_name: Nom de la collection à analyser
         ai_dimensions_text: Texte des dimensions trouvées par l'IA
         
     Returns:
-        Dictionnaire avec tous les résultats d'analyse
+        Dictionnaire avec tous les résultats d'analyse étendus:
+        - Données classiques + permutation_applied, original_difference, mapping_method, etc.
     """
     result = {
         'collection_name': collection_name,
@@ -197,12 +322,20 @@ def analyze_collection_dimensions(collection_name: str, ai_dimensions_text: str 
         'scene_height': 0.0,
         'scene_depth': 0.0,
         'tolerance_status': 'NO_AI_DATA',
-        'difference_percentage': 0.0
+        'difference_percentage': 0.0,
+        # Nouvelles propriétés pour l'auto-permutation
+        'permutation_applied': False,
+        'original_difference': 0.0,
+        'mapping_method': 'no_analysis',
+        'mapping_used': (0, 1, 2),  # Mapping identité par défaut
+        'confidence_level': 'LOW'
     }
     
     try:
         # 1. Calculer les dimensions de la scène
         scene_w, scene_h, scene_d = calculate_collection_dimensions(collection_name)
+        original_scene_dims = (scene_w, scene_h, scene_d)
+        
         result['scene_width'] = scene_w
         result['scene_height'] = scene_h
         result['scene_depth'] = scene_d
@@ -215,14 +348,45 @@ def analyze_collection_dimensions(collection_name: str, ai_dimensions_text: str 
             if ai_dims:
                 result['ai_analysis_success'] = True
                 
-                # 3. Calculer la différence si les deux sont disponibles
+                # 3. Analyse intelligente avec auto-permutation
                 if scene_w > 0 or scene_h > 0 or scene_d > 0:
-                    scene_dims = (scene_w, scene_h, scene_d)
-                    diff_percent = calculate_dimension_difference(ai_dims, scene_dims)
-                    result['difference_percentage'] = diff_percent
-                    result['tolerance_status'] = determine_tolerance_status(diff_percent)
+                    # Récupérer le seuil de permutation auto des préférences
+                    try:
+                        prefs = bpy.context.preferences.addons["T4A_3DFilesQtCheck"].preferences
+                        auto_threshold = prefs.dimension_permutation_threshold
+                    except:
+                        auto_threshold = 0.01  # Fallback 1%
+                    
+                    # Analyse intelligente avec auto-permutation
+                    smart_result = smart_dimension_analysis(ai_dimensions_text, ai_dims, original_scene_dims, auto_threshold)
+                    
+                    # Appliquer la meilleure permutation trouvée
+                    best_mapping = smart_result['mapping_used']
+                    final_scene_dims = tuple(original_scene_dims[i] for i in best_mapping)
+                    
+                    # Mettre à jour les dimensions de scène avec la permutation
+                    result['scene_width'] = final_scene_dims[0]
+                    result['scene_height'] = final_scene_dims[1] 
+                    result['scene_depth'] = final_scene_dims[2]
+                    result['scene_dimensions'] = format_dimensions(final_scene_dims[0], final_scene_dims[1], final_scene_dims[2])
+                    
+                    # Remplir les nouvelles informations de mapping
+                    result['difference_percentage'] = smart_result['best_difference']
+                    result['tolerance_status'] = determine_tolerance_status(smart_result['best_difference'])
+                    result['permutation_applied'] = smart_result['permutation_applied']
+                    result['original_difference'] = smart_result['original_difference']
+                    result['mapping_method'] = smart_result['method']
+                    result['mapping_used'] = best_mapping
+                    result['confidence_level'] = smart_result['confidence']
+                    
+                    # Log si permutation appliquée
+                    if smart_result['permutation_applied']:
+                        mapping_str = " -> ".join([f"{['W','H','D'][i]}→{['X','Y','Z'][best_mapping[i]]}" for i in range(3)])
+                        print(f"[DIMENSION_MAPPING] Collection '{collection_name}': Permutation appliquée ({mapping_str})")
+                        print(f"[DIMENSION_MAPPING] Écart réduit de {smart_result['original_difference']:.1f}% à {smart_result['best_difference']:.1f}%")
+                        
                 else:
-                    result['tolerance_status'] = 'NO_AI_DATA'
+                    result['tolerance_status'] = 'NO_SCENE_DATA'
             else:
                 result['ai_error'] = "Format de dimensions IA non reconnu"
                 result['tolerance_status'] = 'AI_ERROR'
@@ -232,35 +396,99 @@ def analyze_collection_dimensions(collection_name: str, ai_dimensions_text: str 
     except Exception as e:
         result['ai_error'] = f"Erreur d'analyse: {str(e)[:50]}"
         result['tolerance_status'] = 'AI_ERROR'
+        print(f"Erreur dans analyze_collection_dimensions: {e}")
     
     return result
 
 
 def update_dimension_result(dim_result, analysis_result: Dict[str, Any]):
     """
-    Met à jour un objet T4A_DimResult avec les résultats d'analyse.
+    Met à jour un objet T4A_DimResult avec les résultats d'analyse étendue.
     
     Args:
         dim_result: Instance de T4A_DimResult à mettre à jour
-        analysis_result: Dictionnaire de résultats d'analyse
+        analysis_result: Dictionnaire de résultats d'analyse avec nouvelles propriétés
     """
     try:
-        # Mettre à jour toutes les propriétés
-        for key, value in analysis_result.items():
-            if hasattr(dim_result, key):
-                setattr(dim_result, key, value)
+        # Mapping des propriétés principales
+        property_mapping = {
+            'ai_analysis_success': 'ai_analysis_success',
+            'ai_dimensions': 'ai_dimensions', 
+            'ai_error': 'ai_analysis_error',  # Nom différent dans T4A_DimResult
+            'scene_dimensions': 'scene_dimensions',
+            'scene_width': 'scene_width',
+            'scene_height': 'scene_height', 
+            'scene_depth': 'scene_depth',
+            'difference_percentage': 'difference_percentage',
+            'tolerance_status': 'tolerance_status'
+        }
+        
+        # Mettre à jour les propriétés classiques
+        for result_key, dim_result_attr in property_mapping.items():
+            if result_key in analysis_result and hasattr(dim_result, dim_result_attr):
+                setattr(dim_result, dim_result_attr, analysis_result[result_key])
+        
+        # Mettre à jour les nouvelles propriétés de permutation
+        new_properties = {
+            'permutation_applied': 'permutation_applied',
+            'original_difference': 'original_difference',
+            'mapping_method': 'mapping_method',
+            'confidence_level': 'confidence_level'
+        }
+        
+        for result_key, dim_result_attr in new_properties.items():
+            if result_key in analysis_result and hasattr(dim_result, dim_result_attr):
+                setattr(dim_result, dim_result_attr, analysis_result[result_key])
+        
+        # Gestion spéciale pour le mapping utilisé (tuple vers propriétés séparées)
+        if 'mapping_used' in analysis_result and hasattr(dim_result, 'mapping_used_x'):
+            mapping = analysis_result['mapping_used']
+            if isinstance(mapping, (tuple, list)) and len(mapping) >= 3:
+                dim_result.mapping_used_x = mapping[0]
+                dim_result.mapping_used_y = mapping[1] 
+                dim_result.mapping_used_z = mapping[2]
+        
+        # Log des mises à jour importantes
+        if analysis_result.get('permutation_applied', False):
+            original = analysis_result.get('original_difference', 0.0)
+            final = analysis_result.get('difference_percentage', 0.0)
+            method = analysis_result.get('mapping_method', 'unknown')
+            print(f"[UPDATE_DIM_RESULT] Permutation mise à jour: {original:.1f}% → {final:.1f}% ({method})")
                 
     except Exception as e:
         print(f"Erreur lors de la mise à jour du résultat: {e}")
 
 
+def convert_mapping_tuple_to_properties(mapping_tuple: Tuple[int, int, int]) -> Dict[str, int]:
+    """
+    Convertit un tuple de mapping en dictionnaire de propriétés séparées.
+    
+    Args:
+        mapping_tuple: Tuple (x_index, y_index, z_index)
+        
+    Returns:
+        Dict avec mapping_used_x, mapping_used_y, mapping_used_z
+    """
+    try:
+        if not isinstance(mapping_tuple, (tuple, list)) or len(mapping_tuple) != 3:
+            return {'mapping_used_x': 0, 'mapping_used_y': 1, 'mapping_used_z': 2}
+            
+        return {
+            'mapping_used_x': mapping_tuple[0],
+            'mapping_used_y': mapping_tuple[1],
+            'mapping_used_z': mapping_tuple[2]
+        }
+    except:
+        return {'mapping_used_x': 0, 'mapping_used_y': 1, 'mapping_used_z': 2}
+
+
 # === OPÉRATEUR BLENDER POUR RECALCULER LES DIMENSIONS ===
 
 class T4A_OT_RecalculateDimensions(bpy.types.Operator):
-    """Recalcule les dimensions d'une collection et compare avec l'IA"""
+    """Recalcule les dimensions avec recherche automatique de permutation optimale"""
     bl_idname = "t4a.recalculate_dimensions"
     bl_label = "Recalculer Dimensions"
-    bl_description = "Recalcule les dimensions de la collection et compare avec les données IA"
+    bl_description = "Recalcule les dimensions avec recherche automatique de la meilleure permutation"
     bl_options = {'REGISTER', 'UNDO'}
     
     collection_name: bpy.props.StringProperty(
@@ -268,6 +496,76 @@ class T4A_OT_RecalculateDimensions(bpy.types.Operator):
         description="Nom de la collection à analyser",
         default=""
     )
+    
+    def execute(self, context):
+        if not self.collection_name:
+            self.report({'ERROR'}, "Nom de collection requis")
+            return {'CANCELLED'}
+        
+        try:
+            collection = bpy.data.collections.get(self.collection_name)
+            if not collection:
+                self.report({'ERROR'}, f"Collection '{self.collection_name}' introuvable")
+                return {'CANCELLED'}
+
+            # Récupérer l'analyse IA depuis les custom properties
+            ai_text = collection.get("ia_analysis_dimensions", "")
+            if not ai_text:
+                self.report({'WARNING'}, "Aucune analyse IA trouvée pour cette collection")
+                return {'CANCELLED'}
+
+            # Effectuer l'analyse complète avec permutation intelligente
+            print(f"[DIMENSION_RECALC] Recalcul avec auto-permutation pour '{self.collection_name}'")
+            analysis_result = analyze_collection_dimensions(self.collection_name, ai_text)
+
+            if analysis_result['ai_analysis_success']:
+                # Mettre à jour les données dans la scène si nécessaire
+                scene = context.scene
+                dims = getattr(scene, 't4a_dimensions', None)
+                
+                if dims:
+                    # Chercher l'item correspondant pour mise à jour
+                    target_item = None
+                    for item in dims:
+                        if item.collection_name == self.collection_name:
+                            target_item = item
+                            break
+                    
+                    if target_item:
+                        # Mettre à jour les nouvelles propriétés
+                        update_dimension_result(target_item, analysis_result)
+                
+                # Messages informatifs
+                if analysis_result.get('permutation_applied', False):
+                    mapping = analysis_result.get('mapping_used', (0,1,2))
+                    mapping_str = " -> ".join([f"{['W','H','D'][i]}→{['X','Y','Z'][mapping[i]]}" for i in range(3)])
+                    original_diff = analysis_result.get('original_difference', 0.0)
+                    new_diff = analysis_result.get('difference_percentage', 0.0)
+                    
+                    status_msg = f"Permutation appliquée ({mapping_str}): {original_diff:.1f}% → {new_diff:.1f}%"
+                    self.report({'INFO'}, f"Dimensions optimisées ! {status_msg}")
+                else:
+                    diff = analysis_result.get('difference_percentage', 0.0)
+                    status_msg = f"Mapping direct conservé - Écart: {diff:.1f}%"
+                    self.report({'INFO'}, f"Dimensions recalculées. {status_msg}")
+                    
+                print(f"[DIMENSION_RECALC] Résultat: {status_msg}")
+            else:
+                error_msg = analysis_result.get('ai_error', 'Erreur inconnue lors du recalcul')
+                self.report({'ERROR'}, f"Échec du recalcul: {error_msg}")
+                return {'CANCELLED'}
+
+            # Forcer le rafraîchissement de l'UI
+            for area in context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    area.tag_redraw()
+
+            return {'FINISHED'}
+
+        except Exception as e:
+            self.report({'ERROR'}, f"Erreur lors du recalcul: {str(e)}")
+            print(f"[DIMENSION_RECALC] Erreur: {e}")
+            return {'CANCELLED'}
     
     def execute(self, context):
         if not self.collection_name:

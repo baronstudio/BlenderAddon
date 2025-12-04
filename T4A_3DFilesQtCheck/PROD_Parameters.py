@@ -135,6 +135,15 @@ Provide detailed analysis focusing on 3D modeling requirements.""",
         max=1.0,
         step=0.01
     )
+    
+    dimension_permutation_threshold: bpy.props.FloatProperty(
+        name="Seuil Permutation Auto",
+        description="Seuil d'écart (%) déclenchant la recherche automatique de meilleur mapping (ex: 0.01 = 1%)",
+        default=0.01,
+        min=0.001,
+        max=0.5,
+        step=0.001
+    )
 
     api_timeout: bpy.props.IntProperty(
         name="Timeout API",
@@ -561,7 +570,8 @@ class T4A_DimResult(bpy.types.PropertyGroup):
             ('WARNING', 'Warning', 'Dimensions outside tolerance'),
             ('ERROR', 'Error', 'Critical dimension difference'),
             ('NO_AI_DATA', 'No Data', 'No AI dimension data available'),
-            ('AI_ERROR', 'AI Error', 'AI analysis failed')
+            ('AI_ERROR', 'AI Error', 'AI analysis failed'),
+            ('NO_SCENE_DATA', 'No Scene', 'No scene dimension data')
         ],
         default='NO_AI_DATA'
     )
@@ -571,6 +581,68 @@ class T4A_DimResult(bpy.types.PropertyGroup):
         default=0.0,
         min=0.0,
         max=100.0
+    )
+    
+    # --- NOUVELLES PROPRIÉTÉS POUR PERMUTATION AUTOMATIQUE ---
+    permutation_applied: bpy.props.BoolProperty(
+        name="Permutation Appliquée", 
+        description="True si une permutation automatique a été appliquée pour optimiser le mapping",
+        default=False
+    )
+    
+    original_difference: bpy.props.FloatProperty(
+        name="Écart Original (%)", 
+        description="Pourcentage d'écart avant application de la permutation",
+        default=0.0,
+        min=0.0,
+        max=100.0
+    )
+    
+    mapping_method: bpy.props.EnumProperty(
+        name="Méthode Mapping",
+        description="Méthode utilisée pour le mapping des dimensions",
+        items=[
+            ('direct_mapping', "Direct", "Mapping direct sans permutation"),
+            ('auto_permutation', "Auto Permutation", "Permutation automatique appliquée"),
+            ('no_analysis', "Aucune", "Aucune analyse effectuée"),
+            ('error_fallback', "Erreur", "Fallback suite à une erreur")
+        ],
+        default='no_analysis'
+    )
+    
+    mapping_used_x: bpy.props.IntProperty(
+        name="Mapping X",
+        description="Index de la dimension scène mappée sur la largeur IA (0=X, 1=Y, 2=Z)",
+        default=0,
+        min=0,
+        max=2
+    )
+    
+    mapping_used_y: bpy.props.IntProperty(
+        name="Mapping Y", 
+        description="Index de la dimension scène mappée sur la hauteur IA (0=X, 1=Y, 2=Z)",
+        default=1,
+        min=0,
+        max=2
+    )
+    
+    mapping_used_z: bpy.props.IntProperty(
+        name="Mapping Z",
+        description="Index de la dimension scène mappée sur la profondeur IA (0=X, 1=Y, 2=Z)", 
+        default=2,
+        min=0,
+        max=2
+    )
+    
+    confidence_level: bpy.props.EnumProperty(
+        name="Niveau de Confiance",
+        description="Niveau de confiance dans le résultat du mapping",
+        items=[
+            ('HIGH', "Élevé", "Écart < 5% - Mapping très fiable"),
+            ('MEDIUM', "Moyen", "Écart 5-15% - Mapping modérément fiable"),
+            ('LOW', "Faible", "Écart > 15% - Mapping peu fiable")
+        ],
+        default='LOW'
     )
     # Ajout des statistiques de textures
     texture_result: bpy.props.PointerProperty(type=T4A_TextureResult)

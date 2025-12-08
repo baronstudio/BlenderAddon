@@ -9,9 +9,9 @@ import time
 import os
 
 
-class T4A_OT_BakerMatExample(Operator):
-    """Example operator for material baking"""
-    bl_idname = "t4a.baker_mat_example"
+class T4A_OT_BakerMat(Operator):
+    """Operator for material baking"""
+    bl_idname = "t4a.baker_mat"
     bl_label = "Bake Materials"
     bl_description = "Execute material baking process for selected objects"
     bl_options = {'REGISTER', 'UNDO'}
@@ -19,36 +19,80 @@ class T4A_OT_BakerMatExample(Operator):
     def execute(self, context):
         props = context.scene.t4a_baker_props
         prefs = context.preferences.addons[__package__].preferences
-        
-        # Start material baking
         start_time = time.time()
         props.is_baking = True
-        
         self.report({'INFO'}, "Starting material baking process...")
-        
-        # Get selected objects
-        selected_objects = context.selected_objects
-        if not selected_objects:
-            self.report({'WARNING'}, "No objects selected for material baking")
+
+        obj = context.active_object
+        if not obj or not obj.data or not hasattr(obj.data, 'materials'):
+            self.report({'WARNING'}, "No active object with materials found")
             props.is_baking = False
             return {'CANCELLED'}
-        
-        bake_type = props.mat_bake_type
-        output_format = props.mat_output_format
-        
-        self.report({'INFO'}, f"Baking {len(selected_objects)} material(s)...")
-        self.report({'INFO'}, f"Bake Type: {bake_type}")
-        self.report({'INFO'}, f"Output Format: {output_format}")
-        
-        # TODO: Implement actual material baking logic here
-        
-        # Finish baking
+
+        bake_type = props.mat_bake_type.lower()  # e.g. 'diffuse', 'normal', etc.
+        output_format = props.mat_output_format.lower()  # e.g. 'png', 'jpeg', etc.
+        resolution = int(props.bake_resolution)
+
+        #control if cycle is setup for baking if not start T4A_OT_PrepareCyclesBaking()
+        if context.scene.render.engine != 'CYCLES':
+            bpy.ops.t4a.prepare_cycles_baking()
+
+
+        mat_list = [mat for mat in obj.data.materials if mat]
+        if not mat_list:
+            self.report({'WARNING'}, f"No materials found on active object {obj.name}")
+            props.is_baking = False
+            return {'CANCELLED'}
+
+        for mat in mat_list:
+            mat_name = mat.name
+            # Crée une image temporaire pour le baking
+            img_name = f"{mat_name}_{bake_type}"
+            img = bpy.data.images.new(img_name, width=resolution, height=resolution)
+
+            # Attribue l'image à un node du matériau (si nodes actifs)
+            if mat.use_nodes:
+                nodes = mat.node_tree.nodes
+                tex_node = nodes.new('ShaderNodeTexImage')
+                tex_node.image = img
+                mat.node_tree.nodes.active = tex_node
+            else:
+                self.report({'WARNING'}, f"Material {mat_name} does not use nodes. Skipping.")
+                continue
+
+            # Configure le type de baking
+            context.scene.render.bake.use_selected_to_active = False
+            context.scene.render.bake.use_clear = True
+            context.scene.render.bake.margin = 16
+            context.scene.render.bake.use_pass_direct = True
+            context.scene.render.bake.use_pass_indirect = True
+
+            # Lance le baking
+            try:
+                bpy.ops.object.bake(type=bake_type.upper())
+            except Exception as e:
+                self.report({'ERROR'}, f"Bake failed for {mat_name}: {e}")
+                continue
+
+            # Sauvegarde l'image
+            ext = output_format.lower()
+            if ext == 'jpeg':
+                ext = 'jpg'
+            file_path = bpy.path.abspath(f"//{mat_name}_{bake_type}.{ext}")
+            img.filepath_raw = file_path
+            img.file_format = output_format.upper()
+            img.save()
+            self.report({'INFO'}, f"Saved: {file_path}")
+
+            # Nettoyage du node temporaire
+            if mat.use_nodes:
+                nodes.remove(tex_node)
+            bpy.data.images.remove(img)
+
         end_time = time.time()
         props.last_bake_time = end_time - start_time
         props.is_baking = False
-        
         self.report({'INFO'}, f"Material baking completed in {props.last_bake_time:.2f} seconds")
-        
         return {'FINISHED'}
 
 
@@ -272,7 +316,7 @@ class T4A_OT_BatchBakeMaterials(Operator):
 
 # Registration
 classes = (
-    T4A_OT_BakerMatExample,
+    T4A_OT_BakerMat,
     T4A_OT_BakePBRMaps,
     T4A_OT_BakeDiffuse,
     T4A_OT_BakeNormal,
@@ -285,10 +329,12 @@ classes = (
 
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    #for cls in classes:
+        #bpy.utils.register_class(cls)
+    pass
 
 
 def unregister():
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    #for cls in reversed(classes):
+        #bpy.utils.unregister_class(cls)
+    pass

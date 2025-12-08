@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 # Metadata
-id = "t4a_asset_config_baker"
+id = "T4A_AssetConfigBaker"
 name = "T4A Assets Configuration Baker"
 tagline = "Automates 3D asset preparation for web configurators"
 version = "1.0.0"

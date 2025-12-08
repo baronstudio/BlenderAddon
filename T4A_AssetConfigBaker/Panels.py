@@ -1,3 +1,4 @@
+
 """
 T4A Assets Configuration Baker - UI Panels
 All UI panels for the 3D View (N-Panel)
@@ -47,10 +48,60 @@ class T4A_PT_MainPanel(bpy.types.Panel):
         # Material Baking section
         box = layout.box()
         box.label(text="Material Baking:", icon='MATERIAL')
-        col = box.column(align=True)
         
-        # Placeholder for Baker_Mat_V1 operators
-        col.operator("t4a.baker_mat_example", text="Bake Materials", icon='NODE_MATERIAL')
+        # UIList pour les matériaux de l'objet actif
+        obj = context.active_object
+        if obj and obj.type == 'MESH' and hasattr(obj.data, 'materials'):
+            # Synchroniser la liste des matériaux avec l'objet actif
+            row = box.row()
+            row.template_list(
+                "T4A_UL_MaterialBakeList", "",
+                props, "materials",
+                props, "active_material_index",
+                rows=3
+            )
+            
+            # Boutons pour gérer la liste
+            col = row.column(align=True)
+            col.operator("t4a.refresh_material_list", icon='FILE_REFRESH', text="")
+            
+            # Détails du matériau sélectionné
+            if props.materials and props.active_material_index < len(props.materials):
+                mat_item = props.materials[props.active_material_index]
+                
+                box.separator()
+                box.label(text=f"Maps for: {mat_item.name}", icon='NODE_MATERIAL')
+                
+                # UIList pour les maps de ce matériau
+                row = box.row()
+                row.template_list(
+                    "T4A_UL_MaterialBakeMapList", "",
+                    mat_item, "maps",
+                    mat_item, "active_map_index",
+                    rows=2
+                )
+                
+                # Boutons pour gérer les maps
+                col = row.column(align=True)
+                col.operator("t4a.add_bake_map", icon='ADD', text="")
+                col.operator("t4a.remove_bake_map", icon='REMOVE', text="")
+                
+                # Détails de la map sélectionnée
+                if mat_item.maps and mat_item.active_map_index < len(mat_item.maps):
+                    map_item = mat_item.maps[mat_item.active_map_index]
+                    
+                    box.separator()
+                    sub = box.box()
+                    sub.prop(map_item, "enabled")
+                    sub.prop(map_item, "map_type")
+                    sub.prop(map_item, "output_format")
+                    sub.prop(map_item, "resolution")
+        else:
+            box.label(text="No active mesh object", icon='INFO')
+        
+        box.separator()
+        col = box.column(align=True)
+        col.operator("t4a.baker_mat", text="Bake Materials", icon='NODE_MATERIAL')
         
         # Export section
         box = layout.box()
@@ -196,20 +247,42 @@ class T4A_PT_InfoPanel(bpy.types.Panel):
             box2.label(text=f"  {line.strip()}")
 
 
+# UI Lists
+#uilistes for material baking management
+class T4A_UL_MaterialBakeList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            layout.label(text=item.name, icon='MATERIAL')
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon='MATERIAL')
+
+#uilistes for material bake maps management
+class T4A_UL_MaterialBakeMapList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            layout.label(text=item.map_type, icon='TEXTURE')
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon='TEXTURE')
+
+
 # Registration
 classes = (
     T4A_PT_MainPanel,
     T4A_PT_BakerPanel,
     T4A_PT_MaterialBakerPanel,
+    T4A_UL_MaterialBakeMapList,
+    T4A_UL_MaterialBakeList,
     T4A_PT_InfoPanel,
 )
 
 
+
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    pass
+
 
 
 def unregister():
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    pass

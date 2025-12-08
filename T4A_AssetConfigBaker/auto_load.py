@@ -46,24 +46,27 @@ def unregister():
             module.unregister()
 
 
-# Import modules
-#################################################
+
+# Système centralisé pour l'ordre de chargement des modules
+MODULE_LOAD_ORDER = [
+    "Properties",
+    "Prefs",
+    "Baker_V1",
+    "Baker_Mat_V1",
+    "Baker_General",
+    "UI_Util",
+    "Panels"
+]
 
 def get_all_submodules(directory):
-    return list(iter_submodules(directory, directory.name))
-
-def iter_submodules(path, package_name):
-    for name in sorted(iter_submodule_names(path)):
-        yield importlib.import_module("." + name, package_name)
-
-def iter_submodule_names(path, root=""):
-    for _, module_name, is_package in pkgutil.iter_modules([str(path)]):
-        if is_package:
-            sub_path = path / module_name
-            sub_root = root + module_name + "."
-            yield from iter_submodule_names(sub_path, sub_root)
-        else:
-            yield root + module_name
+    modules = []
+    for module_name in MODULE_LOAD_ORDER:
+        try:
+            module = importlib.import_module(f".{module_name}", directory.name)
+            modules.append(module)
+        except Exception as e:
+            print(f"Erreur import {module_name}: {e}")
+    return modules
 
 
 # Find classes to register
@@ -120,8 +123,14 @@ def iter_my_classes(modules):
 def get_classes_in_modules(modules):
     classes = set()
     for module in modules:
-        for cls in iter_classes_in_module(module):
-            classes.add(cls)
+        # Si le module définit un tuple 'classes', on l’utilise
+        if hasattr(module, 'classes'):
+            for cls in getattr(module, 'classes'):
+                classes.add(cls)
+        else:
+            # Sinon, on scanne comme avant
+            for cls in iter_classes_in_module(module):
+                classes.add(cls)
     return classes
 
 def iter_classes_in_module(module):
@@ -131,11 +140,11 @@ def iter_classes_in_module(module):
 
 def get_register_base_types():
     return set(getattr(bpy.types, name) for name in [
-        "Panel", "Operator", "PropertyGroup",
+        "PropertyGroup",
         "AddonPreferences", "Header", "Menu",
         "Node", "NodeSocket", "NodeTree",
         "UIList", "RenderEngine",
-        "Gizmo", "GizmoGroup",
+        "Gizmo", "GizmoGroup","Operator","Panel"
     ])
 
 

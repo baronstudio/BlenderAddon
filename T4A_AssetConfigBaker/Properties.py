@@ -16,6 +16,62 @@ from bpy.props import (
 )
 
 
+class T4A_MaterialBakeMapSettings(PropertyGroup):
+    """Settings for individual bake map (diffuse, normal, etc.)"""
+    map_type: EnumProperty(
+        name="Map Type",
+        items=[
+            ('DIFFUSE', "Diffuse", "Bake diffuse map"),
+            ('NORMAL', "Normal", "Bake normal map"),
+            ('SPECULAR', "Specular", "Bake specular map"),
+            ('ROUGHNESS', "Roughness", "Bake roughness map"),
+            ('METALLIC', "Metallic", "Bake metallic map"),
+            ('AO', "AO", "Bake ambient occlusion"),
+            ('EMIT', "Emission", "Bake emission map"),
+        ],
+        default='DIFFUSE'
+    )
+    enabled: BoolProperty(
+        name="Enable",
+        description="Enable this map for baking",
+        default=True
+    )
+    output_format: EnumProperty(
+        name="Format",
+        items=[
+            ('PNG', "PNG", "PNG format"),
+            ('JPEG', "JPEG", "JPEG format"),
+            ('TIFF', "TIFF", "TIFF format"),
+            ('OPEN_EXR', "OpenEXR", "OpenEXR format"),
+        ],
+        default='PNG'
+    )
+    resolution: IntProperty(
+        name="Resolution",
+        description="Resolution for this map",
+        default=1024,
+        min=128,
+        max=8192
+    )
+
+
+class T4A_MaterialBakeItem(PropertyGroup):
+    """Represents a material with its bake maps configuration"""
+    name: StringProperty(
+        name="Material Name",
+        description="Name of the material"
+    )
+    maps: CollectionProperty(
+        type=T4A_MaterialBakeMapSettings,
+        name="Bake Maps"
+    )
+    active_map_index: IntProperty(
+        name="Active Map Index",
+        description="Index of the active map in the list",
+        default=0
+    )
+
+
 class T4A_BakerProperties(PropertyGroup):
     """Main property group for T4A Baker addon"""
     
@@ -177,25 +233,36 @@ class T4A_BakerProperties(PropertyGroup):
         min=1000,
         max=500000
     )
+    
+    # ===== MATERIAL BAKING UI DATA =====
+    
+    materials: CollectionProperty(
+        type=T4A_MaterialBakeItem,
+        name="Materials",
+        description="List of materials from active object"
+    )
+    
+    active_material_index: IntProperty(
+        name="Active Material Index",
+        description="Index of the active material in the list",
+        default=0
+    )
 
 
 # Registration
 classes = (
+    T4A_MaterialBakeMapSettings,
+    T4A_MaterialBakeItem,
     T4A_BakerProperties,
 )
 
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
-    
-    # Register properties to scene
-    bpy.types.Scene.t4a_baker_props = PointerProperty(type=T4A_BakerProperties)
-
+    # Les classes sont déjà enregistrées par auto_load avant l'appel à register()
+    # On attache simplement le PointerProperty à la Scene
+    bpy.types.Scene.t4a_baker_props = bpy.props.PointerProperty(type=T4A_BakerProperties)
 
 def unregister():
     # Unregister properties from scene
-    del bpy.types.Scene.t4a_baker_props
-    
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    if hasattr(bpy.types.Scene, 't4a_baker_props'):
+        del bpy.types.Scene.t4a_baker_props

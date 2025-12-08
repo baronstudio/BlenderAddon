@@ -4522,9 +4522,53 @@ class QBAKER_PG_material(PropertyGroup):
     bake: PointerProperty(type=QBAKER_PG_material_bake)
 
 
+def material_baker_active_material_update(self, context):
+    """Callback when material_baker.active_material_index changes.
+    Sync the scene.qbaker.materials_to_bake_index to the matching material if present.
+    """
+    try:
+        scene = context.scene
+        mat = None
+        if self.materials and 0 <= self.active_material_index < len(self.materials):
+            mat = self.materials[self.active_material_index].material
+
+        if mat is None:
+            return
+
+        # find matching entry in scene.qbaker.materials_to_bake
+        for i, entry in enumerate(scene.qbaker.materials_to_bake):
+            if entry.material == mat:
+                scene.qbaker.materials_to_bake_index = i
+                return
+    except Exception:
+        return
+
+
+def scene_materials_to_bake_index_update(self, context):
+    """Callback when scene.qbaker.materials_to_bake_index changes.
+    Sync material_baker.active_material_index to the matching material if present.
+    """
+    try:
+        scene = context.scene
+        idx = self.materials_to_bake_index
+        if idx is None or idx < 0 or idx >= len(self.materials_to_bake):
+            return
+
+        mat = self.materials_to_bake[idx].material
+        if mat is None:
+            return
+
+        for i, item in enumerate(scene.qbaker.material_baker.materials):
+            if item.material == mat:
+                scene.qbaker.material_baker.active_material_index = i
+                return
+    except Exception:
+        return
+
+
 class QBAKER_PG_material_baker(PropertyGroup):
     materials: CollectionProperty(type=QBAKER_PG_material)
-    active_material_index: IntProperty(name="Active Material Index")
+    active_material_index: IntProperty(name="Active Material Index", update=material_baker_active_material_update)
 
     use_map_global: BoolProperty(
         name="Global Maps",
@@ -4866,6 +4910,55 @@ class SCENE_PG_qbaker(PropertyGroup):
     material_baker: PointerProperty(type=QBAKER_PG_material_baker)
     node_baker: PointerProperty(type=QBAKER_PG_node_baker)
 
+
+# --- PropertyGroup : material à baker (liste dans la scène) ---
+class QBAKER_PG_material_to_bake(PropertyGroup):
+    material: PointerProperty(
+        name="Material",
+        type=bpy.types.Material,
+    )
+
+
+class SCENE_PG_qbaker(PropertyGroup):
+    bake_groups: CollectionProperty(type=QBAKER_PG_bake_group)
+    active_bake_group_index: IntProperty(
+        name="Active Bake Group Index",
+        description="Used for the baked texture name",
+    )
+
+    use_map_global: BoolProperty(
+        name="Global Maps",
+        description="Same maps for all the bake groups",
+        default=True,
+    )
+
+    maps: CollectionProperty(type=QBAKER_PG_map)
+    active_map_index: IntProperty(name="Active Map Index")
+
+    use_bake_global: BoolProperty(
+        name="Global Bake",
+        description="Same bake settings for all the bake groups",
+        default=True,
+    )
+
+    bake: PointerProperty(type=QBAKER_PG_bake)
+    material_baker: PointerProperty(type=QBAKER_PG_material_baker)
+    node_baker: PointerProperty(type=QBAKER_PG_node_baker)
+
+    # Nouvelle propriété : liste persistante des matériaux à baker (View3D UI)
+    materials_to_bake: CollectionProperty(type=QBAKER_PG_material_to_bake)
+    materials_to_bake_index: IntProperty(name="Active Material To Bake Index", default=0, update=scene_materials_to_bake_index_update)
+
+    progress: IntProperty(
+        name="Progress",
+        min=-1,
+        soft_min=0,
+        soft_max=100,
+        max=100,
+        subtype="PERCENTAGE",
+        default=-1,
+    )
+
     progress: IntProperty(
         name="Progress",
         min=-1,
@@ -5008,6 +5101,7 @@ classes = (
     QBAKER_PG_material_bake,
     QBAKER_PG_material_map,
     QBAKER_PG_material,
+    QBAKER_PG_material_to_bake,
     QBAKER_PG_material_baker,
     QBAKER_PG_node_baker,
     SCENE_PG_qbaker,

@@ -2,6 +2,10 @@ import bpy
 from bl_ui.utils import PresetPanel
 from bpy.types import Panel
 
+
+
+
+
 from ..ops.node_bake import UNSUPPORTED_NODES
 from ..utils.addon import package, preferences, version, version_str
 from ..utils.icon import icons
@@ -1200,6 +1204,25 @@ class QBAKER_PT_material_bake(Panel, NODE_EDITOR_Panel):
 
         material_baker = context.scene.qbaker.material_baker
 
+        # Liste des matériaux (identique au panel Node Editor)
+        col = self.draw_list(
+            layout,
+            "QBAKER_UL_material",
+            dataptr=material_baker,
+            propname="materials",
+            active_propname="active_material_index",
+            rows=4 if len(material_baker.materials) > 1 else 3,
+        )
+        col.operator("qbaker.material_add", text="", icon="ADD")
+        col.operator("qbaker.material_load", text="", icon="FILE_REFRESH")
+
+        if len(material_baker.materials) > 1:
+            col.separator()
+
+            col.operator("qbaker.material_move", text="", icon="TRIA_UP").direction = "UP"
+            col.operator("qbaker.material_move", text="", icon="TRIA_DOWN").direction = "DOWN"
+
+        # Bake selection
         if material_baker.use_bake_global:
             bake = material_baker.bake
         else:
@@ -1256,6 +1279,66 @@ class QBAKER_PT_node_bake(Panel, NODE_EDITOR_Panel):
         col.operator("qbaker.node_bake", text=f"Bake ({len(nodes)} Nodes)" if len(nodes) > 1 else "Bake")
 
 
+# Ajout du panel Material Bake dans la View3D
+class QBAKER_PT_material_bake_view3d(Panel, VIEW_3D_Panel):
+    bl_label = "Material Bake"
+    bl_idname = "QBAKER_PT_material_bake_view3d"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "T4AQuick_Baker"
+
+    @classmethod
+    def poll(cls, context):
+        material_baker = getattr(context.scene, "qbaker", None)
+        if not material_baker:
+            return False
+        material_baker = getattr(material_baker, "material_baker", None)
+        return bool(material_baker and material_baker.materials)
+
+    def draw_header(self, context):
+        material_baker = context.scene.qbaker.material_baker
+        self.layout.prop(material_baker, "use_bake_global")
+
+    def draw_header_preset(self, context):
+        material_baker = context.scene.qbaker.material_baker
+
+        if material_baker.use_bake_global:
+            QBAKER_PT_material_bake_global_preset.draw_panel_header(self.layout)
+        else:
+            QBAKER_PT_material_bake_local_preset.draw_panel_header(self.layout)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_decorate = False
+
+        material_baker = context.scene.qbaker.material_baker
+
+        if material_baker.use_bake_global:
+            bake = material_baker.bake
+        else:
+            active_material = material_baker.materials[material_baker.active_material_index]
+            bake = active_material.bake
+
+        bake.draw_path(context, layout)
+        bake.draw(context, layout=layout)
+
+        col = layout.column()
+        col.scale_y = 1.6
+
+        if material_baker.progress >= 0:
+            self.draw_progress(col, material_baker)
+        else:
+            col.operator("qbaker.material_bake")
+
+    def draw_progress(self, col, baker):
+        row = col.row(align=True)
+        row.scale_x = 1.3
+        subrow = row.row(align=True)
+        subrow.enabled = False
+        subrow.prop(baker, "progress", text="Baking...", slider=True)
+        row.operator("qbaker.material_bake_cancel", icon="X", text="")
+
+
 class QBAKER_PT_help:
     bl_label = f"Help - v{version_str}"
     bl_category = "M-Bridge"
@@ -1273,8 +1356,6 @@ class QBAKER_PT_help:
             col.operator("qbaker.changelog", icon="RECOVER_LAST")
         col.operator("wm.url_open", text="Documentation", icon="HELP").url = "https://github.com/baronstudio/BlenderAddon/tree/master/T4A_quick_baker"
         
-        
-
 
 class QBAKER_PT_view3d_help(Panel, VIEW_3D_Panel, QBAKER_PT_help):
     pass
@@ -1319,6 +1400,7 @@ classes = (
     QBAKER_PT_material_bake,
     QBAKER_PT_node_bake_preset,
     QBAKER_PT_node_bake,
+    QBAKER_PT_material_bake_view3d,
     QBAKER_PT_view3d_help,
     QBAKER_PT_node_editor_help,
 )

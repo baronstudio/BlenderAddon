@@ -11,16 +11,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-bl_info = {
-    "name" : "T4A_AssetsConfigBaker",
-    "author" : "Tech 4 Art Conseil",
-    "description" : "",
-    "blender" : (2, 80, 0),
-    "version" : (0, 0, 1),
-    "location" : "",
-    "warning" : "",
-    "category" : "Generic"
-}
+"""
+T4A Assets Configuration Baker
+Automates and streamlines the preparation of 3D assets for web-based configurators.
+Compatible with Blender 5.0+
+"""
 
 from . import auto_load
 

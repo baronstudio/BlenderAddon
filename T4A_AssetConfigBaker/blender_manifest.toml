@@ -1,0 +1,36 @@
+schema_version = "1.0.0"
+
+# Metadata
+id = "t4a_asset_config_baker"
+name = "T4A Assets Configuration Baker"
+tagline = "Automates 3D asset preparation for web configurators"
+version = "1.0.0"
+type = "add-on"
+
+# Description
+maintainer = "Jean-Baptiste BARON <contact@tech4art.fr>"
+license = ["SPDX:GPL-3.0-or-later"]
+
+# Supported Blender version
+blender_version_min = "5.0.0"
+
+# Tags for organization (define type: 'add-on')
+tags = [
+    "3D View",
+    "Asset",
+    "Import-Export",
+    "Material",
+    "Pipeline",
+]
+
+# Website
+website = "https://github.com/baronstudio/BlenderAddon/tree/master/T4A_AssetConfigBaker"
+
+# Permissions (none required for now)
+# permissions = []
+
+# Wheels (Python dependencies - none for now, but ready for future)
+# wheels = []
+
+[permissions]
+files = "Access to export models and textures"

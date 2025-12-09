@@ -7,6 +7,7 @@ import bpy
 from bpy.types import Operator
 import time
 import os
+from . import BakeTypeMapper
 
 
 class T4A_OT_BakerMat(Operator):
@@ -47,8 +48,16 @@ class T4A_OT_BakerMat(Operator):
         obj.select_set(True)
         context.view_layer.objects.active = obj
 
+        # Mémorise l'ordre original des matériaux pour restauration ultérieure
+        original_materials_order = [mat for mat in obj.data.materials if mat]
+        original_active_index = obj.active_material_index
+
         # Boucle sur la liste des matériaux configurés dans l'UI
         for mat_item in props.materials:
+            # Ignore les matériaux désactivés
+            if not mat_item.enabled:
+                continue
+            
             mat_name = mat_item.name
             
             # Trouve le matériau correspondant dans l'objet
@@ -98,40 +107,63 @@ class T4A_OT_BakerMat(Operator):
 
                 # Attribue l'image à un node du matériau
                 nodes = mat.node_tree.nodes
-                tex_node = nodes.new('ShaderNodeTexImage')
-                tex_node.image = img
-                mat.node_tree.nodes.active = tex_node
+                
+                # Check if we need to extract a specific socket (e.g., Metallic, Alpha)
+                socket_to_extract = BakeTypeMapper.requires_socket_extraction(bake_type)
+                if socket_to_extract:
+                    # Create emission setup to capture the socket value
+                    success = self._setup_socket_extraction(mat, socket_to_extract, img)
+                    if not success:
+                        self.report({'WARNING'}, f"Could not extract socket '{socket_to_extract}' for {mat_name}. Skipping.")
+                        bpy.data.images.remove(img)
+                        continue
+                else:
+                    # Standard baking setup
+                    tex_node = nodes.new('ShaderNodeTexImage')
+                    tex_node.image = img
+                    mat.node_tree.nodes.active = tex_node
 
-                # Configure le type de baking
+                # Configure le type de baking avec le mapping
+                cycles_bake_type = BakeTypeMapper.setup_bake_settings(context, bake_type)
+                
                 context.scene.render.bake.use_selected_to_active = False
                 context.scene.render.bake.use_clear = True
                 context.scene.render.bake.margin = 16
-                context.scene.render.bake.use_pass_direct = True
-                context.scene.render.bake.use_pass_indirect = True
 
-                # Lance le baking
+                # Lance le baking avec le type Cycles approprié
                 try:
-                    bpy.ops.object.bake(type=bake_type)
+                    bpy.ops.object.bake(type=cycles_bake_type)
+                    
+                    # Post-processing si nécessaire
+                    post_process = BakeTypeMapper.requires_post_processing(bake_type)
+                    if post_process:
+                        self._apply_post_processing(img, post_process)
+                    
                     successful_bakes += 1
                 except Exception as e:
-                    self.report({'ERROR'}, f"Bake failed for {mat_name} ({bake_type}): {e}")
+                    self.report({'ERROR'}, f"Bake failed for {mat_name} ({bake_type} -> {cycles_bake_type}): {e}")
                     # Nettoyage en cas d'erreur
-                    try:
-                        nodes.remove(tex_node)
-                    except:
-                        pass
+                    if socket_to_extract:
+                        self._cleanup_socket_extraction(mat)
+                    else:
+                        try:
+                            nodes.remove(tex_node)
+                        except:
+                            pass
                     if img:
                         bpy.data.images.remove(img)
                     continue
 
-                # Sauvegarde l'image
+                # Sauvegarde l'image avec le suffix configuré
                 ext = output_format.lower()
                 if ext == 'jpeg':
                     ext = 'jpg'
                 elif ext == 'open_exr':
                     ext = 'exr'
                 
-                file_path = bpy.path.abspath(f"//{mat_name}_{bake_type}.{ext}")
+                # Utilise le suffix personnalisé ou génère un par défaut
+                suffix = map_item.file_suffix if map_item.file_suffix else f"_{bake_type.lower()}"
+                file_path = bpy.path.abspath(f"//{mat_name}{suffix}.{ext}")
                 img.filepath_raw = file_path
                 img.file_format = output_format
                 try:
@@ -141,11 +173,28 @@ class T4A_OT_BakerMat(Operator):
                     self.report({'ERROR'}, f"Failed to save {file_path}: {e}")
 
                 # Nettoyage du node temporaire et de l'image
-                try:
-                    nodes.remove(tex_node)
-                except:
-                    pass
+                if socket_to_extract:
+                    self._cleanup_socket_extraction(mat)
+                else:
+                    try:
+                        nodes.remove(tex_node)
+                    except:
+                        pass
                 bpy.data.images.remove(img)
+
+        # Restaure l'ordre original des matériaux
+        if original_materials_order:
+            # Vide la liste actuelle
+            while len(obj.data.materials) > 0:
+                obj.data.materials.pop(index=0)
+            
+            # Réinsère les matériaux dans l'ordre original
+            for mat in original_materials_order:
+                obj.data.materials.append(mat)
+            
+            # Restaure l'index actif
+            if 0 <= original_active_index < len(obj.data.materials):
+                obj.active_material_index = original_active_index
 
         end_time = time.time()
         props.last_bake_time = end_time - start_time
@@ -153,6 +202,128 @@ class T4A_OT_BakerMat(Operator):
         
         self.report({'INFO'}, f"Material baking completed: {successful_bakes}/{total_bakes} successful in {props.last_bake_time:.2f}s")
         return {'FINISHED'}
+    
+    def _setup_socket_extraction(self, material, socket_name, target_image):
+        """
+        Setup material to extract a specific socket value via emission
+        Stores original output node for restoration
+        """
+        nodes = material.node_tree.nodes
+        links = material.node_tree.links
+        
+        # Find Principled BSDF
+        principled = None
+        for node in nodes:
+            if node.type == 'BSDF_PRINCIPLED':
+                principled = node
+                break
+        
+        if not principled:
+            return False
+        
+        # Check if socket exists and is connected
+        if socket_name not in principled.inputs:
+            return False
+        
+        socket = principled.inputs[socket_name]
+        
+        # Store original material output for restoration
+        material_output = None
+        for node in nodes:
+            if node.type == 'OUTPUT_MATERIAL':
+                material_output = node
+                break
+        
+        # Store original connection
+        if material_output and material_output.inputs['Surface'].is_linked:
+            original_link = material_output.inputs['Surface'].links[0]
+            material['_t4a_original_surface'] = original_link.from_socket.name
+            material['_t4a_original_node'] = original_link.from_node.name
+        
+        # Create emission setup
+        emission = nodes.new('ShaderNodeEmission')
+        emission.name = '_T4A_TempEmission'
+        
+        # Create image texture node for baking
+        tex_node = nodes.new('ShaderNodeTexImage')
+        tex_node.name = '_T4A_TempBakeTarget'
+        tex_node.image = target_image
+        nodes.active = tex_node
+        
+        # Connect socket to emission
+        if socket.is_linked:
+            # Socket has connection, use it
+            from_socket = socket.links[0].from_socket
+            links.new(from_socket, emission.inputs['Color'])
+        else:
+            # Socket has default value, use it
+            if hasattr(socket, 'default_value'):
+                emission.inputs['Color'].default_value = (socket.default_value,) * 3 + (1,)
+        
+        # Connect to output
+        if material_output:
+            links.new(emission.outputs['Emission'], material_output.inputs['Surface'])
+        
+        return True
+    
+    def _cleanup_socket_extraction(self, material):
+        """
+        Restore material to original state after socket extraction
+        """
+        nodes = material.node_tree.nodes
+        links = material.node_tree.links
+        
+        # Remove temporary nodes
+        for node in list(nodes):
+            if node.name in ['_T4A_TempEmission', '_T4A_TempBakeTarget']:
+                nodes.remove(node)
+        
+        # Restore original connection
+        if '_t4a_original_surface' in material and '_t4a_original_node' in material:
+            material_output = None
+            for node in nodes:
+                if node.type == 'OUTPUT_MATERIAL':
+                    material_output = node
+                    break
+            
+            original_node = nodes.get(material['_t4a_original_node'])
+            if material_output and original_node:
+                socket_name = material['_t4a_original_surface']
+                if socket_name in original_node.outputs:
+                    links.new(original_node.outputs[socket_name], material_output.inputs['Surface'])
+            
+            # Cleanup stored data
+            del material['_t4a_original_surface']
+            del material['_t4a_original_node']
+    
+    def _apply_post_processing(self, image, post_process_settings):
+        """
+        Apply post-processing to baked image
+        """
+        import numpy as np
+        
+        # Get pixel data
+        pixels = np.array(image.pixels[:])
+        width = image.size[0]
+        height = image.size[1]
+        channels = image.channels
+        
+        # Reshape to (height, width, channels)
+        pixels = pixels.reshape((height, width, channels))
+        
+        # Apply transformations
+        if post_process_settings.get('flip_y'):
+            # Flip Y channel (for DirectX normal maps)
+            if channels >= 2:
+                pixels[:, :, 1] = 1.0 - pixels[:, :, 1]
+        
+        if post_process_settings.get('invert'):
+            # Invert all color channels (for glossiness)
+            for c in range(min(3, channels)):
+                pixels[:, :, c] = 1.0 - pixels[:, :, c]
+        
+        # Write back to image
+        image.pixels = pixels.flatten().tolist()
 
 
 class T4A_OT_BakePBRMaps(Operator):

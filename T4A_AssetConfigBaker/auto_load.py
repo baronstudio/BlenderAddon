@@ -49,11 +49,13 @@ def unregister():
 
 # Système centralisé pour l'ordre de chargement des modules
 MODULE_LOAD_ORDER = [
+    "BakeTypeMapper",
     "Properties",
     "Prefs",
     "Baker_V1",
     "Baker_Mat_V1",
     "Baker_General",
+    "PresetManager",
     "UI_Util",
     "Panels"
 ]

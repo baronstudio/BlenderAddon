@@ -7,6 +7,42 @@ import bpy
 from bpy.types import Operator
 
 
+# PBR Preset configurations
+PBR_PRESETS = {
+    'STANDARD': [
+        ('ALBEDO', '_albedo'),
+        ('NORMAL_GL', '_normal_gl'),
+        ('METALLIC', '_metallic'),
+        ('ROUGHNESS', '_roughness'),
+        ('OCCLUSION', '_occlusion'),
+    ],
+    'GAME': [
+        ('ALBEDO', '_albedo'),
+        ('NORMAL_GL', '_normal'),
+        ('OCCLUSION', '_occlusion'),
+        ('ROUGHNESS', '_roughness'),
+        ('METALLIC', '_metallic'),
+    ],
+    'FULL': [
+        ('ALBEDO', '_albedo'),
+        ('NORMAL_GL', '_normal_gl'),
+        ('METALLIC', '_metallic'),
+        ('ROUGHNESS', '_roughness'),
+        ('OCCLUSION', '_occlusion'),
+        ('ALPHA', '_alpha'),
+        ('EMISSION', '_emission'),
+        ('HEIGHT', '_height'),
+    ],
+    'GLTF': [
+        ('ALBEDO', '_basecolor'),
+        ('NORMAL_GL', '_normal'),
+        ('OCCLUSION', '_occlusion'),
+        ('ROUGHNESS', '_roughness'),
+        ('METALLIC', '_metallic'),
+    ],
+}
+
+
 class T4A_OT_RefreshMaterialList(Operator):
     """Refresh the material list from active object"""
     bl_idname = "t4a.refresh_material_list"
@@ -25,6 +61,10 @@ class T4A_OT_RefreshMaterialList(Operator):
         # Clear existing list
         props.materials.clear()
         
+        # Get preset configuration (unified property)
+        preset = props.preset_selection if not props.preset_selection.startswith('CUSTOM_') else 'STANDARD'
+        preset_maps = PBR_PRESETS.get(preset, PBR_PRESETS['STANDARD'])
+        
         # Add all materials from active object
         if hasattr(obj.data, 'materials'):
             for mat in obj.data.materials:
@@ -32,23 +72,16 @@ class T4A_OT_RefreshMaterialList(Operator):
                     mat_item = props.materials.add()
                     mat_item.name = mat.name
                     
-                    # Add default maps for each material
-                    default_maps = [
-                        ('DIFFUSE', True),
-                        ('NORMAL', True),
-                        ('ROUGHNESS', False),
-                        ('METALLIC', False),
-                        ('AO', False),
-                    ]
-                    
-                    for map_type, enabled in default_maps:
+                    # Add maps based on preset
+                    for map_type, suffix in preset_maps:
                         map_item = mat_item.maps.add()
                         map_item.map_type = map_type
-                        map_item.enabled = enabled
+                        map_item.file_suffix = suffix
+                        map_item.enabled = True
                         map_item.output_format = 'PNG'
                         map_item.resolution = 1024
         
-        self.report({'INFO'}, f"Loaded {len(props.materials)} material(s)")
+        self.report({'INFO'}, f"Loaded {len(props.materials)} material(s) with {preset} preset")
         return {'FINISHED'}
 
 
@@ -113,9 +146,56 @@ class T4A_OT_RemoveBakeMap(Operator):
         return {'FINISHED'}
 
 
+class T4A_OT_ApplyPBRPreset(Operator):
+    """Apply PBR preset to selected material"""
+    bl_idname = "t4a.apply_pbr_preset"
+    bl_label = "Apply PBR Preset"
+    bl_description = "Apply the selected PBR preset to the active material"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    def execute(self, context):
+        props = context.scene.t4a_baker_props
+        
+        if not props.materials or props.active_material_index >= len(props.materials):
+            self.report({'WARNING'}, "No material selected")
+            return {'CANCELLED'}
+        
+        mat_item = props.materials[props.active_material_index]
+        
+        # Get preset from unified preset_selection property
+        preset = props.preset_selection
+        
+        # Skip custom presets (they are loaded via file)
+        if preset.startswith('CUSTOM_'):
+            self.report({'INFO'}, "Custom preset already loaded from file")
+            return {'FINISHED'}
+        
+        if preset == 'CUSTOM':
+            self.report({'INFO'}, "Custom preset - manually configure maps")
+            return {'FINISHED'}
+        
+        preset_maps = PBR_PRESETS.get(preset, PBR_PRESETS['STANDARD'])
+        
+        # Clear existing maps
+        mat_item.maps.clear()
+        
+        # Add preset maps
+        for map_type, suffix in preset_maps:
+            map_item = mat_item.maps.add()
+            map_item.map_type = map_type
+            map_item.file_suffix = suffix
+            map_item.enabled = True
+            map_item.output_format = 'PNG'
+            map_item.resolution = 1024
+        
+        self.report({'INFO'}, f"Applied {preset} preset to {mat_item.name}")
+        return {'FINISHED'}
+
+
 # Registration
 classes = (
     T4A_OT_RefreshMaterialList,
+    T4A_OT_ApplyPBRPreset,
     T4A_OT_AddBakeMap,
     T4A_OT_RemoveBakeMap,
 )

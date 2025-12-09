@@ -79,6 +79,11 @@ class T4A_MaterialBakeItem(PropertyGroup):
         name="Material Name",
         description="Name of the material"
     )
+    enabled: BoolProperty(
+        name="Enable",
+        description="Enable this material for baking",
+        default=True
+    )
     maps: CollectionProperty(
         type=T4A_MaterialBakeMapSettings,
         name="Bake Maps"
@@ -254,18 +259,44 @@ class T4A_BakerProperties(PropertyGroup):
     
     # ===== MATERIAL BAKING UI DATA =====
     
-    pbr_preset: EnumProperty(
-        name="PBR Preset",
-        description="Quick preset for common PBR texture sets",
-        items=[
-            ('STANDARD', "Standard PBR", "Albedo, Normal, Metallic, Roughness, Occlusion"),
-            ('GAME', "Game Engine", "Optimized for game engines (Albedo, Normal, Occlusion, Roughness, Metallic)"),
-            ('FULL', "Full PBR Suite", "Complete PBR texture set with all maps"),
-            ('GLTF', "glTF 2.0", "glTF standard: BaseColor, Normal, OcclusionRoughnessMetallic"),
-            ('CUSTOM', "Custom", "Manual selection of texture maps"),
-        ],
-        default='STANDARD'
+    preset_selection: EnumProperty(
+        name="Preset",
+        description="Baking preset (PBR built-in or custom)",
+        items=lambda self, context: self.get_all_preset_items(context),
+        update=lambda self, context: self.on_preset_changed(context)
     )
+    
+    def get_all_preset_items(self, context):
+        """Dynamic enum items combining PBR presets and custom presets"""
+        items = []
+        
+        # Built-in PBR presets
+        items.append(('STANDARD', "Standard PBR", "Albedo, Normal, Metallic, Roughness, Occlusion"))
+        items.append(('GAME', "Game Engine", "Optimized for game engines"))
+        items.append(('FULL', "Full PBR Suite", "Complete PBR texture set with all maps"))
+        items.append(('GLTF', "glTF 2.0", "glTF standard texture set"))
+        items.append(('CUSTOM', "Custom", "Manual selection of texture maps"))
+        
+        # Separator (visual only, not selectable in enum)
+        # Custom presets from files
+        from . import PresetManager
+        custom_presets = PresetManager.get_available_presets()
+        
+        for preset_id, preset_name, preset_desc in custom_presets:
+            # Prefix custom presets to distinguish them
+            items.append((f"CUSTOM_{preset_id}", f"➤ {preset_name}", preset_desc))
+        
+        return items
+    
+    def on_preset_changed(self, context):
+        """Auto-apply preset when selection changes"""
+        if self.preset_selection.startswith('CUSTOM_'):
+            # Custom preset: load from file
+            preset_id = self.preset_selection[7:]  # Remove 'CUSTOM_' prefix
+            bpy.ops.t4a.load_baking_preset(preset_name=preset_id)
+        elif self.preset_selection in ['STANDARD', 'GAME', 'FULL', 'GLTF']:
+            # Built-in PBR preset: apply via existing operator
+            bpy.ops.t4a.apply_pbr_preset()
     
     materials: CollectionProperty(
         type=T4A_MaterialBakeItem,

@@ -49,6 +49,31 @@ class T4A_PT_MainPanel(bpy.types.Panel):
         box = layout.box()
         box.label(text="Material Baking:", icon='MATERIAL')
         
+        # Unified Preset Management
+        preset_box = box.box()
+        preset_box.label(text="Presets:", icon='PRESET')
+        
+        # Dropdown with buttons (similar to Unity/Unreal)
+        row = preset_box.row(align=True)
+        
+        # Dropdown selector (combines PBR + Custom presets)
+        sub = row.row(align=True)
+        sub.scale_x = 2.5
+        sub.prop(props, "preset_selection", text="")
+        
+        # Delete button (minus icon) - only for custom presets
+        if props.preset_selection.startswith('CUSTOM_'):
+            row.operator("t4a.delete_baking_preset", text="", icon='REMOVE')
+        
+        # Apply button for built-in PBR presets
+        if props.preset_selection in ['STANDARD', 'GAME', 'FULL', 'GLTF']:
+            row.operator("t4a.apply_pbr_preset", text="", icon='CHECKMARK')
+        
+        # Add button (plus icon) for creating new custom presets
+        row.operator("t4a.new_preset_menu", text="", icon='ADD')
+        
+        box.separator()
+        
         # UIList pour les matériaux de l'objet actif
         obj = context.active_object
         if obj and obj.type == 'MESH' and hasattr(obj.data, 'materials'):
@@ -64,6 +89,7 @@ class T4A_PT_MainPanel(bpy.types.Panel):
             # Boutons pour gérer la liste
             col = row.column(align=True)
             col.operator("t4a.refresh_material_list", icon='FILE_REFRESH', text="")
+            col.operator("t4a.apply_pbr_preset", icon='PRESET', text="")
             
             # Détails du matériau sélectionné
             if props.materials and props.active_material_index < len(props.materials):
@@ -252,7 +278,9 @@ class T4A_PT_InfoPanel(bpy.types.Panel):
 class T4A_UL_MaterialBakeList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            layout.label(text=item.name, icon='MATERIAL')
+            row = layout.row(align=True)
+            row.prop(item, "enabled", text="", icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
+            row.label(text=item.name, icon='MATERIAL')
         elif self.layout_type in {'GRID'}:
             layout.alignment = 'CENTER'
             layout.label(text="", icon='MATERIAL')
@@ -261,7 +289,9 @@ class T4A_UL_MaterialBakeList(bpy.types.UIList):
 class T4A_UL_MaterialBakeMapList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            layout.label(text=item.map_type, icon='TEXTURE')
+            row = layout.row(align=True)
+            row.prop(item, "enabled", text="", icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
+            row.label(text=item.map_type, icon='TEXTURE')
         elif self.layout_type in {'GRID'}:
             layout.alignment = 'CENTER'
             layout.label(text="", icon='TEXTURE')

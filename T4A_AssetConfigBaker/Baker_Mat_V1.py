@@ -29,70 +29,129 @@ class T4A_OT_BakerMat(Operator):
             props.is_baking = False
             return {'CANCELLED'}
 
-        bake_type = props.mat_bake_type.lower()  # e.g. 'diffuse', 'normal', etc.
-        output_format = props.mat_output_format.lower()  # e.g. 'png', 'jpeg', etc.
-        resolution = int(props.bake_resolution)
-
-        #control if cycle is setup for baking if not start T4A_OT_PrepareCyclesBaking()
+        # Contrôle si Cycles est configuré pour le baking
         if context.scene.render.engine != 'CYCLES':
             bpy.ops.t4a.prepare_cycles_baking()
 
-
-        mat_list = [mat for mat in obj.data.materials if mat]
-        if not mat_list:
-            self.report({'WARNING'}, f"No materials found on active object {obj.name}")
+        # Vérifie que la liste des matériaux est configurée
+        if not props.materials:
+            self.report({'WARNING'}, "No materials configured. Use 'Refresh Material List' button first.")
             props.is_baking = False
             return {'CANCELLED'}
 
-        for mat in mat_list:
-            mat_name = mat.name
-            # Crée une image temporaire pour le baking
-            img_name = f"{mat_name}_{bake_type}"
-            img = bpy.data.images.new(img_name, width=resolution, height=resolution)
+        total_bakes = 0
+        successful_bakes = 0
 
-            # Attribue l'image à un node du matériau (si nodes actifs)
-            if mat.use_nodes:
+        # S'assure que l'objet est sélectionné pour le baking
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+
+        # Boucle sur la liste des matériaux configurés dans l'UI
+        for mat_item in props.materials:
+            mat_name = mat_item.name
+            
+            # Trouve le matériau correspondant dans l'objet
+            mat = bpy.data.materials.get(mat_name)
+
+            # Move material to first slot and set as active
+            if mat and obj.data.materials.get(mat_name):
+                mat_index = obj.data.materials.find(mat_name)
+                if mat_index != -1 and mat_index != 0:
+                    # Remove from current position
+                    obj.data.materials.pop(index=mat_index)
+                    # Insert at first position
+                    obj.data.materials.append(mat)
+                    # Move to index 0
+                    for i in range(len(obj.data.materials) - 1, 0, -1):
+                        obj.data.materials[i], obj.data.materials[i-1] = obj.data.materials[i-1], obj.data.materials[i]
+                # Set as active material slot
+                obj.active_material_index = 0
+                    #bpy.context.object.active_material_index = mat_index
+                    #bpy.ops.object.material_slot_assign()
+
+            if not mat:
+                self.report({'WARNING'}, f"Material '{mat_name}' not found in scene. Skipping.")
+                continue
+            
+            # Vérifie que le matériau utilise des nodes
+            if not mat.use_nodes:
+                self.report({'WARNING'}, f"Material '{mat_name}' does not use nodes. Skipping.")
+                continue
+            
+            # Boucle sur toutes les maps configurées pour ce matériau
+            for map_item in mat_item.maps:
+                # Ignore les maps désactivées
+                if not map_item.enabled:
+                    continue
+                
+                total_bakes += 1
+                bake_type = map_item.map_type
+                output_format = map_item.output_format
+                resolution = map_item.resolution
+                
+                self.report({'INFO'}, f"Baking {bake_type} for material '{mat_name}' at {resolution}x{resolution}...")
+                
+                # Crée une image temporaire pour le baking
+                img_name = f"{mat_name}_{bake_type}"
+                img = bpy.data.images.new(img_name, width=resolution, height=resolution)
+
+                # Attribue l'image à un node du matériau
                 nodes = mat.node_tree.nodes
                 tex_node = nodes.new('ShaderNodeTexImage')
                 tex_node.image = img
                 mat.node_tree.nodes.active = tex_node
-            else:
-                self.report({'WARNING'}, f"Material {mat_name} does not use nodes. Skipping.")
-                continue
 
-            # Configure le type de baking
-            context.scene.render.bake.use_selected_to_active = False
-            context.scene.render.bake.use_clear = True
-            context.scene.render.bake.margin = 16
-            context.scene.render.bake.use_pass_direct = True
-            context.scene.render.bake.use_pass_indirect = True
+                # Configure le type de baking
+                context.scene.render.bake.use_selected_to_active = False
+                context.scene.render.bake.use_clear = True
+                context.scene.render.bake.margin = 16
+                context.scene.render.bake.use_pass_direct = True
+                context.scene.render.bake.use_pass_indirect = True
 
-            # Lance le baking
-            try:
-                bpy.ops.object.bake(type=bake_type.upper())
-            except Exception as e:
-                self.report({'ERROR'}, f"Bake failed for {mat_name}: {e}")
-                continue
+                # Lance le baking
+                try:
+                    bpy.ops.object.bake(type=bake_type)
+                    successful_bakes += 1
+                except Exception as e:
+                    self.report({'ERROR'}, f"Bake failed for {mat_name} ({bake_type}): {e}")
+                    # Nettoyage en cas d'erreur
+                    try:
+                        nodes.remove(tex_node)
+                    except:
+                        pass
+                    if img:
+                        bpy.data.images.remove(img)
+                    continue
 
-            # Sauvegarde l'image
-            ext = output_format.lower()
-            if ext == 'jpeg':
-                ext = 'jpg'
-            file_path = bpy.path.abspath(f"//{mat_name}_{bake_type}.{ext}")
-            img.filepath_raw = file_path
-            img.file_format = output_format.upper()
-            img.save()
-            self.report({'INFO'}, f"Saved: {file_path}")
+                # Sauvegarde l'image
+                ext = output_format.lower()
+                if ext == 'jpeg':
+                    ext = 'jpg'
+                elif ext == 'open_exr':
+                    ext = 'exr'
+                
+                file_path = bpy.path.abspath(f"//{mat_name}_{bake_type}.{ext}")
+                img.filepath_raw = file_path
+                img.file_format = output_format
+                try:
+                    img.save()
+                    self.report({'INFO'}, f"Saved: {file_path}")
+                except Exception as e:
+                    self.report({'ERROR'}, f"Failed to save {file_path}: {e}")
 
-            # Nettoyage du node temporaire
-            if mat.use_nodes:
-                nodes.remove(tex_node)
-            bpy.data.images.remove(img)
+                # Nettoyage du node temporaire et de l'image
+                try:
+                    nodes.remove(tex_node)
+                except:
+                    pass
+                bpy.data.images.remove(img)
 
         end_time = time.time()
         props.last_bake_time = end_time - start_time
         props.is_baking = False
-        self.report({'INFO'}, f"Material baking completed in {props.last_bake_time:.2f} seconds")
+        
+        self.report({'INFO'}, f"Material baking completed: {successful_bakes}/{total_bakes} successful in {props.last_bake_time:.2f}s")
         return {'FINISHED'}
 
 

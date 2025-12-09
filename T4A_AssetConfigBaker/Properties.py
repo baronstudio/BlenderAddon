@@ -21,15 +21,33 @@ class T4A_MaterialBakeMapSettings(PropertyGroup):
     map_type: EnumProperty(
         name="Map Type",
         items=[
-            ('DIFFUSE', "Diffuse", "Bake diffuse map"),
-            ('NORMAL', "Normal", "Bake normal map"),
-            ('SPECULAR', "Specular", "Bake specular map"),
-            ('ROUGHNESS', "Roughness", "Bake roughness map"),
-            ('METALLIC', "Metallic", "Bake metallic map"),
-            ('AO', "AO", "Bake ambient occlusion"),
-            ('EMIT', "Emission", "Bake emission map"),
+            # PBR Core Maps
+            ('ALBEDO', "Albedo (Base Color)", "Base color without lighting information"),
+            ('NORMAL_GL', "Normal (OpenGL)", "Normal map in OpenGL format (+Y up)"),
+            ('NORMAL_DX', "Normal (DirectX)", "Normal map in DirectX format (-Y up)"),
+            ('METALLIC', "Metallic", "Metallic/Metal map for PBR"),
+            ('ROUGHNESS', "Roughness", "Roughness map for PBR"),
+            ('OCCLUSION', "Occlusion (AO)", "Ambient occlusion map"),
+            
+            # Additional PBR Maps
+            ('ALPHA', "Alpha/Opacity", "Transparency/opacity map"),
+            ('EMISSION', "Emission", "Emission/glow/emissive map"),
+            ('HEIGHT', "Height", "Height/displacement map"),
+            ('GLOSSINESS', "Glossiness", "Glossiness map (inverse of roughness)"),
+            ('SPECULAR', "Specular", "Specular reflectance map"),
+            
+            # Legacy/Special
+            ('DIFFUSE', "Diffuse (Legacy)", "Legacy diffuse baking with lighting"),
+            ('COMBINED', "Combined", "Combined render output"),
         ],
-        default='DIFFUSE'
+        default='ALBEDO'
+    )
+    
+    # Suffix utilisé pour le nom de fichier (ex: _albedo, _normal_gl)
+    file_suffix: StringProperty(
+        name="File Suffix",
+        description="Suffix for the exported texture file",
+        default=""
     )
     enabled: BoolProperty(
         name="Enable",
@@ -235,6 +253,19 @@ class T4A_BakerProperties(PropertyGroup):
     )
     
     # ===== MATERIAL BAKING UI DATA =====
+    
+    pbr_preset: EnumProperty(
+        name="PBR Preset",
+        description="Quick preset for common PBR texture sets",
+        items=[
+            ('STANDARD', "Standard PBR", "Albedo, Normal, Metallic, Roughness, Occlusion"),
+            ('GAME', "Game Engine", "Optimized for game engines (Albedo, Normal, Occlusion, Roughness, Metallic)"),
+            ('FULL', "Full PBR Suite", "Complete PBR texture set with all maps"),
+            ('GLTF', "glTF 2.0", "glTF standard: BaseColor, Normal, OcclusionRoughnessMetallic"),
+            ('CUSTOM', "Custom", "Manual selection of texture maps"),
+        ],
+        default='STANDARD'
+    )
     
     materials: CollectionProperty(
         type=T4A_MaterialBakeItem,

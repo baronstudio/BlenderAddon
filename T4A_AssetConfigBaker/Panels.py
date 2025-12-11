@@ -64,6 +64,8 @@ class T4A_PT_MainPanel(bpy.types.Panel):
             box.label(text=f"Objects in: {coll_item.name}", icon='OBJECT_DATA')
             
             row = box.row()
+            # Disable if collection is not enabled
+            row.enabled = coll_item.enabled
             row.template_list(
                 "T4A_UL_ObjectBakeList", "",
                 coll_item, "objects",
@@ -87,86 +89,132 @@ class T4A_PT_MainPanel(bpy.types.Panel):
         box = layout.box()
         box.label(text="Material Baking:", icon='MATERIAL')
         
-        # Unified Preset Management
-        preset_box = box.box()
-        preset_box.label(text="Presets:", icon='PRESET')
+       
         
-        # Dropdown with buttons (similar to Unity/Unreal)
-        row = preset_box.row(align=True)
         
-        # Dropdown selector (combines PBR + Custom presets)
-        sub = row.row(align=True)
-        sub.scale_x = 2.5
-        sub.prop(props, "preset_selection", text="")
-        
-        # Delete button (minus icon) - only for custom presets
-        if props.preset_selection.startswith('CUSTOM_'):
-            row.operator("t4a.delete_baking_preset", text="", icon='REMOVE')
-        
-        # Apply button for built-in PBR presets
-        if props.preset_selection in ['STANDARD', 'GAME', 'FULL', 'GLTF']:
-            row.operator("t4a.apply_pbr_preset", text="", icon='CHECKMARK')
-        
-        # Add button (plus icon) for creating new custom presets
-        row.operator("t4a.new_preset_menu", text="", icon='ADD')
         
         box.separator()
         
-        # UIList pour les matériaux de l'objet actif
-        obj = context.active_object
-        if obj and obj.type == 'MESH' and hasattr(obj.data, 'materials'):
-            # Synchroniser la liste des matériaux avec l'objet actif
-            row = box.row()
-            row.template_list(
-                "T4A_UL_MaterialBakeList", "",
-                props, "materials",
-                props, "active_material_index",
-                rows=3
-            )
+        # UIList pour les matériaux - Accès via la hiérarchie collections → objects
+        if props.collections and props.active_collection_index < len(props.collections):
+            coll_item = props.collections[props.active_collection_index]
             
-            # Boutons pour gérer la liste
-            col = row.column(align=True)
-            col.operator("t4a.refresh_material_list", icon='FILE_REFRESH', text="")
-            col.operator("t4a.apply_pbr_preset", icon='PRESET', text="")
+            # Disable entire material section if collection is disabled
+            material_section_enabled = coll_item.enabled
+
+           
             
-            # Détails du matériau sélectionné
-            if props.materials and props.active_material_index < len(props.materials):
-                mat_item = props.materials[props.active_material_index]
+            if coll_item.objects and coll_item.active_object_index < len(coll_item.objects):
+                obj_item = coll_item.objects[coll_item.active_object_index]
                 
-                box.separator()
-                box.label(text=f"Maps for: {mat_item.name}", icon='NODE_MATERIAL')
+                # Also check if object is enabled
+                material_section_enabled = material_section_enabled and obj_item.enabled
                 
-                # UIList pour les maps de ce matériau
+                # UIList des matériaux de l'objet sélectionné
                 row = box.row()
+                row.enabled = material_section_enabled
                 row.template_list(
-                    "T4A_UL_MaterialBakeMapList", "",
-                    mat_item, "maps",
-                    mat_item, "active_map_index",
-                    rows=2
+                    "T4A_UL_MaterialBakeList", "",
+                    obj_item, "materials",
+                    obj_item, "active_material_index",
+                    rows=3
                 )
                 
-                # Boutons pour gérer les maps
+                # Boutons pour gérer la liste
                 col = row.column(align=True)
-                col.operator("t4a.add_bake_map", icon='ADD', text="")
-                col.operator("t4a.remove_bake_map", icon='REMOVE', text="")
+                col.operator("t4a.refresh_material_list", icon='FILE_REFRESH', text="")
                 
-                # Détails de la map sélectionnée
-                if mat_item.maps and mat_item.active_map_index < len(mat_item.maps):
-                    map_item = mat_item.maps[mat_item.active_map_index]
+
+
+                ###### PRESETS SELECTOR ######
+                # Unified Preset Management
+                preset_box = box.box()
+                preset_box.enabled = material_section_enabled
+                preset_box.label(text="Presets:", icon='PRESET')
+                
+                # Dropdown with buttons (similar to Unity/Unreal)
+                row = preset_box.row(align=True)
+                
+                # Dropdown selector (all presets from JSON)
+                sub = row.row(align=True)
+                sub.scale_x = 2.5
+                sub.prop(props, "preset_selection", text="")
+                
+                # Delete button (minus icon) - only for custom presets
+                from . import PresetLoader
+                preset = PresetLoader.get_preset(props.preset_selection)
+                if preset and preset.get('is_custom', False):
+                    row.operator("t4a.delete_baking_preset", text="", icon='REMOVE')
+                
+                # Apply button
+                row.operator("t4a.apply_preset_from_json", text="", icon='CHECKMARK')
+                
+                # Add button (plus icon) for creating new custom presets
+                row.operator("t4a.new_preset_menu", text="", icon='ADD')
+
+                ###### END PRESETS SELECTOR ######
+
+                # Détails du matériau sélectionné
+                if obj_item.materials and obj_item.active_material_index < len(obj_item.materials):
+                    mat_item = obj_item.materials[obj_item.active_material_index]
+                    
+                    # Check if material is enabled too
+                    maps_section_enabled = material_section_enabled and mat_item.enabled
                     
                     box.separator()
-                    sub = box.box()
-                    sub.prop(map_item, "enabled")
-                    sub.prop(map_item, "map_type")
-                    sub.prop(map_item, "output_format")
-                    sub.prop(map_item, "resolution")
+                    box.label(text=f"Maps for: {mat_item.name}", icon='NODE_MATERIAL')
+                    
+                    # UIList pour les maps de ce matériau
+                    row = box.row()
+                    row.enabled = maps_section_enabled
+                    row.template_list(
+                        "T4A_UL_MaterialBakeMapList", "",
+                        mat_item, "maps",
+                        mat_item, "active_map_index",
+                        rows=2
+                    )
+                    
+                    # Boutons pour gérer les maps
+                    col = row.column(align=True)
+                    col.operator("t4a.add_bake_map", icon='ADD', text="")
+                    col.operator("t4a.remove_bake_map", icon='REMOVE', text="")
+                    
+                    # Détails de la map sélectionnée
+                    if mat_item.maps and mat_item.active_map_index < len(mat_item.maps):
+                        map_item = mat_item.maps[mat_item.active_map_index]
+                        
+                        box.separator()
+                        sub = box.box()
+                        sub.enabled = maps_section_enabled
+                        sub.prop(map_item, "enabled")
+                        sub.prop(map_item, "map_type")
+                        sub.prop(map_item, "output_format")
+                        sub.prop(map_item, "resolution")
+                else:
+                    box.label(text="No materials in selected object", icon='INFO')
+            else:
+                box.label(text="No objects in selected collection", icon='INFO')
         else:
-            box.label(text="No active mesh object", icon='INFO')
+            box.label(text="No collections configured", icon='INFO')
+
+        
         
         box.separator()
+        
+        # Progress bar
+        if props.is_baking:
+            col = box.column(align=True)
+            col.prop(props, "bake_progress", text="Progress", slider=True)
+        
+        # Bake button
         col = box.column(align=True)
-        col.operator("t4a.baker_mat", text="Bake Materials (active object)", icon='NODE_MATERIAL')
-        col.operator("t4a.bake_configuration", text="Bake Materials (Full Configuration)", icon='NODE_MATERIAL')
+        #col.operator("t4a.baker_mat", text="Bake Materials (active object)", icon='NODE_MATERIAL')
+        
+        if props.is_baking:
+            col.enabled = False  # Désactive le bouton pendant le baking
+            col.operator("t4a.bake_configuration", text="Baking in progress...", icon='TIME')
+        else:
+            col.operator("t4a.bake_configuration", text="Bake Materials (Full Configuration)", icon='NODE_MATERIAL')
 
 
         
@@ -192,7 +240,18 @@ class T4A_PT_BakerPanel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         props = context.scene.t4a_baker_props
+        prefs = context.preferences.addons[__package__].preferences
         
+        # Export Path reminder
+        box = layout.box()
+        box.label(text="Export Path:", icon='FILE_FOLDER')
+        row = box.row()
+        row.prop(prefs, "default_export_path", text="")
+        row.operator("preferences.addon_show", text="", icon='PREFERENCES').module = __package__
+        
+        layout.separator()
+        
+        # Baking Settings
         box = layout.box()
         col = box.column(align=True)
         
@@ -215,6 +274,17 @@ class T4A_PT_MaterialBakerPanel(bpy.types.Panel):
     bl_parent_id = "T4A_PT_main_panel"
     bl_options = {'DEFAULT_CLOSED'}
     bl_order = 2  # Third panel
+    
+    @classmethod
+    def poll(cls, context):
+        """Control panel visibility - return False to hide the panel"""
+        # Example conditions to hide panel:
+        # return False  # Always hide
+        # return context.scene.t4a_baker_props.some_property  # Conditional
+        # prefs = context.preferences.addons[__package__].preferences
+        # return prefs.show_material_panel  # From preferences
+        
+        return False #True  # Always show (default behavior)
     
     def draw(self, context):
         layout = self.layout
@@ -343,10 +413,23 @@ class T4A_UL_MaterialBakeList(bpy.types.UIList):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             row = layout.row(align=True)
             row.prop(item, "enabled", text="", icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
-            row.label(text=item.name, icon='MATERIAL')
+            
+            # Get material from Blender data to show preview icon
+            mat = bpy.data.materials.get(item.name)
+            if mat and mat.preview:
+                # Use material preview icon (like in Blender's material list)
+                row.label(text=item.name, icon_value=mat.preview.icon_id)
+            else:
+                # Fallback to generic material icon
+                row.label(text=item.name, icon='MATERIAL')
         elif self.layout_type in {'GRID'}:
             layout.alignment = 'CENTER'
-            layout.label(text="", icon='MATERIAL')
+            # In grid mode, show preview icon
+            mat = bpy.data.materials.get(item.name)
+            if mat and mat.preview:
+                layout.label(text="", icon_value=mat.preview.icon_id)
+            else:
+                layout.label(text="", icon='MATERIAL')
 
 #uilistes for material bake maps management
 class T4A_UL_MaterialBakeMapList(bpy.types.UIList):

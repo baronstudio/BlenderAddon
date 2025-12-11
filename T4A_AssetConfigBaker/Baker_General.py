@@ -5,6 +5,113 @@ Prépare la scène pour le baking avec Cycles
 
 import bpy
 from bpy.types import Operator
+import re
+
+
+def clean_blender_name(name):
+    """
+    Remove Blender's automatic suffixes (.001, .002, etc.) from names
+    for file export while keeping the original scene objects untouched.
+    
+    Examples:
+        "Material.001" -> "Material"
+        "Cube.003" -> "Cube"
+        "Collection.012" -> "Collection"
+        "MyMaterial" -> "MyMaterial" (unchanged)
+    
+    Args:
+        name: The name to clean
+        
+    Returns:
+        Cleaned name without numeric suffix
+    """
+    # Pattern: matches .001, .002, .999, etc. at the end of string
+    return re.sub(r'\.\d{3}$', '', name)
+
+
+def generate_baking_summary(props):
+    """
+    Generate a detailed summary of what will be baked based on enabled items.
+    
+    Args:
+        props: T4A_BakerProperties from scene
+        
+    Returns:
+        String with formatted summary or None if nothing to bake
+    """
+    try:
+        summary_lines = []
+        summary_lines.append("=" * 60)
+        summary_lines.append("BAKING CONFIGURATION SUMMARY")
+        summary_lines.append("=" * 60)
+        
+        total_collections = 0
+        total_objects = 0
+        total_materials = 0
+        total_maps = 0
+        
+        # Loop through collections
+        for coll_item in props.collections:
+            if not coll_item.enabled:
+                continue
+            
+            total_collections += 1
+            coll_objects = []
+            
+            # Loop through objects in collection
+            for obj_item in coll_item.objects:
+                if not obj_item.enabled:
+                    continue
+                
+                total_objects += 1
+                obj_materials = []
+                
+                # Loop through materials in object
+                for mat_item in obj_item.materials:
+                    if not mat_item.enabled:
+                        continue
+                    
+                    total_materials += 1
+                    mat_maps = []
+                    
+                    # Loop through maps in material
+                    for map_item in mat_item.maps:
+                        if not map_item.enabled:
+                            continue
+                        
+                        total_maps += 1
+                        mat_maps.append(f"        - {map_item.map_type} ({map_item.output_format}, {map_item.resolution}px)")
+                    
+                    if mat_maps:
+                        obj_materials.append(f"    📦 Material: {mat_item.name} ({len(mat_maps)} maps)")
+                        obj_materials.extend(mat_maps)
+                
+                if obj_materials:
+                    coll_objects.append(f"  🎲 Object: {obj_item.name} ({len([m for m in obj_item.materials if m.enabled])} materials)")
+                    coll_objects.extend(obj_materials)
+            
+            if coll_objects:
+                summary_lines.append(f"\n📁 Collection: {coll_item.name}")
+                summary_lines.extend(coll_objects)
+        
+        # Add totals
+        summary_lines.append("\n" + "-" * 60)
+        summary_lines.append("TOTALS:")
+        summary_lines.append(f"  Collections: {total_collections}")
+        summary_lines.append(f"  Objects:     {total_objects}")
+        summary_lines.append(f"  Materials:   {total_materials}")
+        summary_lines.append(f"  Maps:        {total_maps}")
+        summary_lines.append("=" * 60)
+        
+        # Check if there's anything to bake
+        if total_maps == 0:
+            return None
+        
+        return "\n".join(summary_lines)
+    
+    except Exception as e:
+        print(f"[T4A] Error generating baking summary: {e}")
+        return None
 
 
 def find_layer_collection(layer_collection, collection_name):
@@ -39,6 +146,25 @@ class T4A_OT_Bakeconfiguration(Operator):
     def execute(self, context):
         scene = context.scene
         props = scene.t4a_baker_props
+        
+        # Generate and print baking summary
+        summary = generate_baking_summary(props)
+        if summary is None:
+            self.report({'WARNING'}, "No items enabled for baking. Enable collections, objects, materials and maps first.")
+            return {'CANCELLED'}
+        
+        # Print summary to console
+        print(summary)
+        self.report({'INFO'}, "Baking summary printed to console. Check System Console (Window > Toggle System Console)")
+        
+        # Initialize baking state
+        props.is_baking = True
+        props.bake_progress = 0.0
+        
+        # Count total objects to bake
+        total_objects = sum(1 for coll_item in props.collections if coll_item.enabled 
+                           for obj_item in coll_item.objects if obj_item.enabled)
+        current_object = 0
 
         #memorise la collection courante
         current_collection = context.view_layer.active_layer_collection
@@ -51,15 +177,6 @@ class T4A_OT_Bakeconfiguration(Operator):
                 ColLayer = context.view_layer.layer_collection.children.get(collection.name)
                 if ColLayer:
                     collection_exclude_status[coll_item.name] = ColLayer.exclude
-        
-        ##### DEBUG TEMP
-        for i in props.collections: 
-            print(f"|| {i.name}")
-            for j in i.objects: 
-                print(f"--|| {j.name}")
-                for k in j.materials:
-                    print(f"----|| {k.name}")
-
 
         #looping on collections liste in props
         for coll_item in props.collections:
@@ -108,6 +225,11 @@ class T4A_OT_Bakeconfiguration(Operator):
                 obj = collection.objects.get(objtobake.name)
                 if obj.type != 'MESH':
                     continue
+                
+                # Update progress
+                current_object += 1
+                if total_objects > 0:
+                    props.bake_progress = (current_object / total_objects) * 100.0
 
                 # Assure que l'objet est visible et sélectionnable, selectionné et actif
                 obj.hide_viewport = False
@@ -133,6 +255,10 @@ class T4A_OT_Bakeconfiguration(Operator):
         
         #restor current collection
         context.view_layer.active_layer_collection = current_collection
+        
+        # Finalize baking state
+        props.is_baking = False
+        props.bake_progress = 100.0
 
         self.report({'INFO'}, "Configuration de baking appliquée aux collections sélectionnées")
         return {'FINISHED'}

@@ -1,0 +1,43 @@
+{
+  "id": "gltf",
+  "name": "glTF 2.0",
+  "description": "glTF standard texture set with proper naming",
+  "version": "1.0",
+  "maps": [
+    {
+      "map_type": "ALBEDO",
+      "file_suffix": "_basecolor",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "NORMAL_GL",
+      "file_suffix": "_normal",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "OCCLUSION",
+      "file_suffix": "_occlusion",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "ROUGHNESS",
+      "file_suffix": "_roughness",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "METALLIC",
+      "file_suffix": "_metallic",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    }
+  ]
+}

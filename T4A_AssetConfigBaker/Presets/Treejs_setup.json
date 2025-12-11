@@ -1,0 +1,51 @@
+{
+  "id": "TreeJS_Setup",
+  "name": "Tree JS Setup",
+  "description": "Custom preset for Tree JS with essential maps",
+  "version": "1.0",
+  "is_custom": true,
+  "maps": [
+    {
+      "map_type": "ALBEDO",
+      "file_suffix": "_Albedo",
+      "enabled": true,
+      "output_format": "JPEG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "NORMAL_GL",
+      "file_suffix": "_NormalGL",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "METALLIC",
+      "file_suffix": "_Metallic",
+      "enabled": true,
+      "output_format": "JPEG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "ROUGHNESS",
+      "file_suffix": "_Roughness",
+      "enabled": true,
+      "output_format": "JPEG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "OCCLUSION",
+      "file_suffix": "_Occlusion",
+      "enabled": true,
+      "output_format": "JPEG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "EMISSION",
+      "file_suffix": "_Emission",
+      "enabled": true,
+      "output_format": "JPEG",
+      "resolution": 1024
+    }
+  ]
+}

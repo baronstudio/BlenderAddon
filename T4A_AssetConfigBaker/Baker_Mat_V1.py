@@ -8,6 +8,9 @@ from bpy.types import Operator
 import time
 import os
 from . import BakeTypeMapper
+from .Baker_General import clean_blender_name
+
+
 
 
 class T4A_OT_BakerMat(Operator):
@@ -28,7 +31,8 @@ class T4A_OT_BakerMat(Operator):
         props = context.scene.t4a_baker_props
         prefs = context.preferences.addons[__package__].preferences
         start_time = time.time()
-        props.is_baking = True
+        # Note: is_baking is managed by Baker_General, not here
+        # props.is_baking = True
         self.report({'INFO'}, "Starting material baking process...")
 
         # Use target_object if specified, otherwise use active object
@@ -36,7 +40,6 @@ class T4A_OT_BakerMat(Operator):
             obj = bpy.data.objects.get(self.target_object)
             if not obj:
                 self.report({'WARNING'}, f"Object '{self.target_object}' not found")
-                props.is_baking = False
                 return {'CANCELLED'}
             else:
                 obj = bpy.data.objects.get(self.target_object)
@@ -45,22 +48,29 @@ class T4A_OT_BakerMat(Operator):
 
         #force use of target_object
         #obj = bpy.data.objects.get(self.target_object)
-        props.is_baking = False
         obj = context.active_object
 
         if not obj or not obj.data or not hasattr(obj.data, 'materials'):
             self.report({'WARNING'}, "No active object with materials found")
-            props.is_baking = False
             return {'CANCELLED'}
 
         # Contrôle si Cycles est configuré pour le baking
         if context.scene.render.engine != 'CYCLES':
             bpy.ops.t4a.prepare_cycles_baking()
 
+        # Find the object item in the hierarchy to access its materials
+        obj_item = None
+        for coll_item in props.collections:
+            for o_item in coll_item.objects:
+                if o_item.name == obj.name:
+                    obj_item = o_item
+                    break
+            if obj_item:
+                break
+        
         # Vérifie que la liste des matériaux est configurée
-        if not props.materials:
-            self.report({'WARNING'}, "No materials configured. Use 'Refresh Material List' button first.")
-            props.is_baking = False
+        if not obj_item or not obj_item.materials:
+            self.report({'WARNING'}, f"No materials configured for object '{obj.name}'. Use 'Refresh Object List' button first.")
             return {'CANCELLED'}
 
         total_bakes = 0
@@ -72,8 +82,8 @@ class T4A_OT_BakerMat(Operator):
         original_materials_order = [mat for mat in obj.data.materials if mat]
         original_active_index = obj.active_material_index
 
-        # Boucle sur la liste des matériaux configurés dans l'UI
-        for mat_item in props.materials:
+        # Boucle sur la liste des matériaux configurés dans l'UI (depuis obj_item maintenant)
+        for mat_item in obj_item.materials:
             # Ignore les matériaux désactivés
             if not mat_item.enabled:
                 continue
@@ -195,12 +205,17 @@ class T4A_OT_BakerMat(Operator):
                         collection_name = coll.name
                         break
                 
-                # Crée la structure de dossiers
-                output_dir = os.path.join(base_path, collection_name, obj.name)
+                # Clean names for file export (remove .001, .002, etc.)
+                clean_collection_name = clean_blender_name(collection_name)
+                clean_obj_name = clean_blender_name(obj.name)
+                clean_mat_name = clean_blender_name(mat_name)
+                
+                # Crée la structure de dossiers avec noms nettoyés
+                output_dir = os.path.join(base_path, clean_collection_name, clean_obj_name)
                 os.makedirs(output_dir, exist_ok=True)
                 
-                # Chemin complet du fichier
-                file_path = os.path.join(output_dir, f"{mat_name}{suffix}.{ext}")
+                # Chemin complet du fichier avec nom nettoyé
+                file_path = os.path.join(output_dir, f"{clean_mat_name}{suffix}.{ext}")
                 img.filepath_raw = file_path
                 img.file_format = output_format
                 try:
@@ -235,7 +250,8 @@ class T4A_OT_BakerMat(Operator):
 
         end_time = time.time()
         props.last_bake_time = end_time - start_time
-        props.is_baking = False
+        # Note: is_baking is managed by Baker_General, not here
+        # props.is_baking = False
         
         self.report({'INFO'}, f"Material baking completed: {successful_bakes}/{total_bakes} successful in {props.last_bake_time:.2f}s")
         return {'FINISHED'}

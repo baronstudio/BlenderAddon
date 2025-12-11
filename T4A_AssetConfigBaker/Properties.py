@@ -73,6 +73,28 @@ class T4A_MaterialBakeMapSettings(PropertyGroup):
     )
 
 
+class T4A_MaterialBakeItem(PropertyGroup):
+    """Represents a material with its bake maps configuration"""
+    name: StringProperty(
+        name="Material Name",
+        description="Name of the material"
+    )
+    enabled: BoolProperty(
+        name="Enable",
+        description="Enable this material for baking",
+        default=True
+    )
+    maps: CollectionProperty(
+        type=T4A_MaterialBakeMapSettings,
+        name="Bake Maps"
+    )
+    active_map_index: IntProperty(
+        name="Active Map Index",
+        description="Index of the active map in the list",
+        default=0
+    )
+
+
 class T4A_ObjectBakeItem(PropertyGroup):
     """Represents an object to bake"""
     name: StringProperty(
@@ -83,6 +105,16 @@ class T4A_ObjectBakeItem(PropertyGroup):
         name="Enable",
         description="Enable this object for baking",
         default=True
+    )
+    materials: CollectionProperty(
+        type=T4A_MaterialBakeItem,
+        name="Materials",
+        description="List of materials for this object"
+    )
+    active_material_index: IntProperty(
+        name="Active Material Index",
+        description="Index of the active material in the list",
+        default=0
     )
 
 
@@ -123,55 +155,26 @@ class T4A_CollectionBakeItem(PropertyGroup):
                 obj.select_set(True)
                 context.view_layer.objects.active = obj
                 
-                # Refresh material list for this object
-                props = context.scene.t4a_baker_props
-                props.materials.clear()
+                # Refresh material list for this object (stored in obj_item now)
+                obj_item.materials.clear()
                 
                 # Get preset configuration
-                preset = props.preset_selection if not props.preset_selection.startswith('CUSTOM_') else 'STANDARD'
+                props = context.scene.t4a_baker_props
+                preset_id = props.preset_selection if props.preset_selection and props.preset_selection != 'NONE' else 'standard'
                 
                 # Import here to avoid circular dependency
-                from . import UI_Util
-                preset_maps = UI_Util.PBR_PRESETS.get(preset, UI_Util.PBR_PRESETS['STANDARD'])
+                from . import PresetLoader
                 
                 # Add all materials from the newly active object
                 if hasattr(obj.data, 'materials'):
                     for mat in obj.data.materials:
                         if mat:
-                            mat_item = props.materials.add()
+                            mat_item = obj_item.materials.add()
                             mat_item.name = mat.name
                             mat_item.enabled = True
                             
-                            # Add maps based on preset
-                            for map_type, suffix in preset_maps:
-                                map_item = mat_item.maps.add()
-                                map_item.map_type = map_type
-                                map_item.file_suffix = suffix
-                                map_item.enabled = True
-                                map_item.output_format = 'PNG'
-                                map_item.resolution = 1024
-
-
-class T4A_MaterialBakeItem(PropertyGroup):
-    """Represents a material with its bake maps configuration"""
-    name: StringProperty(
-        name="Material Name",
-        description="Name of the material"
-    )
-    enabled: BoolProperty(
-        name="Enable",
-        description="Enable this material for baking",
-        default=True
-    )
-    maps: CollectionProperty(
-        type=T4A_MaterialBakeMapSettings,
-        name="Bake Maps"
-    )
-    active_map_index: IntProperty(
-        name="Active Map Index",
-        description="Index of the active map in the list",
-        default=0
-    )
+                            # Apply preset from JSON
+                            PresetLoader.apply_preset_to_material(preset_id, mat_item)
 
 
 class T4A_BakerProperties(PropertyGroup):
@@ -265,10 +268,10 @@ class T4A_BakerProperties(PropertyGroup):
     
     bake_progress: FloatProperty(
         name="Bake Progress",
-        description="Current baking progress (0.0 to 1.0)",
+        description="Current baking progress (0 to 100%)",
         default=0.0,
         min=0.0,
-        max=1.0,
+        max=100.0,
         subtype='PERCENTAGE'
     )
     
@@ -360,56 +363,28 @@ class T4A_BakerProperties(PropertyGroup):
     )
     
     def get_all_preset_items(self, context):
-        """Dynamic enum items combining PBR presets and custom presets"""
-        items = []
+        """Dynamic enum items from JSON presets"""
+        from . import PresetLoader
         
-        # Built-in PBR presets
-        items.append(('STANDARD', "Standard PBR", "Albedo, Normal, Metallic, Roughness, Occlusion"))
-        items.append(('GAME', "Game Engine", "Optimized for game engines"))
-        items.append(('FULL', "Full PBR Suite", "Complete PBR texture set with all maps"))
-        items.append(('GLTF', "glTF 2.0", "glTF standard texture set"))
-        items.append(('CUSTOM', "Custom", "Manual selection of texture maps"))
-        
-        # Separator (visual only, not selectable in enum)
-        # Custom presets from files
-        from . import PresetManager
-        custom_presets = PresetManager.get_available_presets()
-        
-        for preset_id, preset_name, preset_desc in custom_presets:
-            # Prefix custom presets to distinguish them
-            items.append((f"CUSTOM_{preset_id}", f"➤ {preset_name}", preset_desc))
+        # Get all presets from JSON files
+        items = PresetLoader.get_all_preset_items()
         
         return items
     
     def on_preset_changed(self, context):
         """Auto-apply preset when selection changes"""
-        if self.preset_selection.startswith('CUSTOM_'):
-            # Custom preset: load from file
-            preset_id = self.preset_selection[7:]  # Remove 'CUSTOM_' prefix
-            bpy.ops.t4a.load_baking_preset(preset_name=preset_id)
-        elif self.preset_selection in ['STANDARD', 'GAME', 'FULL', 'GLTF']:
-            # Built-in PBR preset: apply via existing operator
-            bpy.ops.t4a.apply_pbr_preset()
-    
-    materials: CollectionProperty(
-        type=T4A_MaterialBakeItem,
-        name="Materials",
-        description="List of materials from active object"
-    )
-    
-    active_material_index: IntProperty(
-        name="Active Material Index",
-        description="Index of the active material in the list",
-        default=0
-    )
+        # All presets are now loaded from JSON files
+        # The preset_selection directly contains the preset ID
+        if self.preset_selection and self.preset_selection != 'NONE':
+            bpy.ops.t4a.apply_preset_from_json(preset_id=self.preset_selection)
 
 
 # Registration
 classes = (
     T4A_MaterialBakeMapSettings,
+    T4A_MaterialBakeItem,
     T4A_ObjectBakeItem,
     T4A_CollectionBakeItem,
-    T4A_MaterialBakeItem,
     T4A_BakerProperties,
 )
 

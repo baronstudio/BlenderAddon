@@ -5,83 +5,53 @@ Operators for managing material list and bake maps in the UI
 
 import bpy
 from bpy.types import Operator
-
-
-# PBR Preset configurations
-PBR_PRESETS = {
-    'STANDARD': [
-        ('ALBEDO', '_albedo'),
-        ('NORMAL_GL', '_normal_gl'),
-        ('METALLIC', '_metallic'),
-        ('ROUGHNESS', '_roughness'),
-        ('OCCLUSION', '_occlusion'),
-    ],
-    'GAME': [
-        ('ALBEDO', '_albedo'),
-        ('NORMAL_GL', '_normal'),
-        ('OCCLUSION', '_occlusion'),
-        ('ROUGHNESS', '_roughness'),
-        ('METALLIC', '_metallic'),
-    ],
-    'FULL': [
-        ('ALBEDO', '_albedo'),
-        ('NORMAL_GL', '_normal_gl'),
-        ('METALLIC', '_metallic'),
-        ('ROUGHNESS', '_roughness'),
-        ('OCCLUSION', '_occlusion'),
-        ('ALPHA', '_alpha'),
-        ('EMISSION', '_emission'),
-        ('HEIGHT', '_height'),
-    ],
-    'GLTF': [
-        ('ALBEDO', '_basecolor'),
-        ('NORMAL_GL', '_normal'),
-        ('OCCLUSION', '_occlusion'),
-        ('ROUGHNESS', '_roughness'),
-        ('METALLIC', '_metallic'),
-    ],
-}
+from . import PresetLoader
 
 
 class T4A_OT_RefreshMaterialList(Operator):
-    """Refresh the material list from active object"""
+    """Refresh the material list from active object in the hierarchy"""
     bl_idname = "t4a.refresh_material_list"
     bl_label = "Refresh Material List"
-    bl_description = "Refresh the list of materials from the active object"
+    bl_description = "Refresh the list of materials from the selected object"
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
         props = context.scene.t4a_baker_props
-        obj = context.active_object
         
-        if not obj or obj.type != 'MESH':
-            self.report({'WARNING'}, "No active mesh object")
+        # Find the current object item in the hierarchy
+        if not props.collections or props.active_collection_index >= len(props.collections):
+            self.report({'WARNING'}, "No collection selected")
             return {'CANCELLED'}
         
-        # Clear existing list
-        props.materials.clear()
+        coll_item = props.collections[props.active_collection_index]
         
-        # Get preset configuration (unified property)
-        preset = props.preset_selection if not props.preset_selection.startswith('CUSTOM_') else 'STANDARD'
-        preset_maps = PBR_PRESETS.get(preset, PBR_PRESETS['STANDARD'])
+        if not coll_item.objects or coll_item.active_object_index >= len(coll_item.objects):
+            self.report({'WARNING'}, "No object selected")
+            return {'CANCELLED'}
+        
+        obj_item = coll_item.objects[coll_item.active_object_index]
+        obj = bpy.data.objects.get(obj_item.name)
+        
+        if not obj or obj.type != 'MESH':
+            self.report({'WARNING'}, "Object not found or not a mesh")
+            return {'CANCELLED'}
+        
+        # Clear existing list for this object
+        obj_item.materials.clear()
         
         # Add all materials from active object
         if hasattr(obj.data, 'materials'):
             for mat in obj.data.materials:
                 if mat:
-                    mat_item = props.materials.add()
+                    mat_item = obj_item.materials.add()
                     mat_item.name = mat.name
+                    mat_item.enabled = True
                     
-                    # Add maps based on preset
-                    for map_type, suffix in preset_maps:
-                        map_item = mat_item.maps.add()
-                        map_item.map_type = map_type
-                        map_item.file_suffix = suffix
-                        map_item.enabled = True
-                        map_item.output_format = 'PNG'
-                        map_item.resolution = 1024
+                    # Apply current preset to this material
+                    if props.preset_selection and props.preset_selection != 'NONE':
+                        PresetLoader.apply_preset_to_material(props.preset_selection, mat_item)
         
-        self.report({'INFO'}, f"Loaded {len(props.materials)} material(s) with {preset} preset")
+        self.report({'INFO'}, f"Loaded {len(obj_item.materials)} material(s) with preset")
         return {'FINISHED'}
 
 
@@ -95,11 +65,24 @@ class T4A_OT_AddBakeMap(Operator):
     def execute(self, context):
         props = context.scene.t4a_baker_props
         
-        if not props.materials or props.active_material_index >= len(props.materials):
+        # Find the current object item in the hierarchy
+        if not props.collections or props.active_collection_index >= len(props.collections):
+            self.report({'WARNING'}, "No collection selected")
+            return {'CANCELLED'}
+        
+        coll_item = props.collections[props.active_collection_index]
+        
+        if not coll_item.objects or coll_item.active_object_index >= len(coll_item.objects):
+            self.report({'WARNING'}, "No object selected")
+            return {'CANCELLED'}
+        
+        obj_item = coll_item.objects[coll_item.active_object_index]
+        
+        if not obj_item.materials or obj_item.active_material_index >= len(obj_item.materials):
             self.report({'WARNING'}, "No material selected")
             return {'CANCELLED'}
         
-        mat_item = props.materials[props.active_material_index]
+        mat_item = obj_item.materials[obj_item.active_material_index]
         
         # Add new map
         map_item = mat_item.maps.add()
@@ -125,11 +108,24 @@ class T4A_OT_RemoveBakeMap(Operator):
     def execute(self, context):
         props = context.scene.t4a_baker_props
         
-        if not props.materials or props.active_material_index >= len(props.materials):
+        # Find the current object item in the hierarchy
+        if not props.collections or props.active_collection_index >= len(props.collections):
+            self.report({'WARNING'}, "No collection selected")
+            return {'CANCELLED'}
+        
+        coll_item = props.collections[props.active_collection_index]
+        
+        if not coll_item.objects or coll_item.active_object_index >= len(coll_item.objects):
+            self.report({'WARNING'}, "No object selected")
+            return {'CANCELLED'}
+        
+        obj_item = coll_item.objects[coll_item.active_object_index]
+        
+        if not obj_item.materials or obj_item.active_material_index >= len(obj_item.materials):
             self.report({'WARNING'}, "No material selected")
             return {'CANCELLED'}
         
-        mat_item = props.materials[props.active_material_index]
+        mat_item = obj_item.materials[obj_item.active_material_index]
         
         if not mat_item.maps or mat_item.active_map_index >= len(mat_item.maps):
             self.report({'WARNING'}, "No map selected")
@@ -146,55 +142,73 @@ class T4A_OT_RemoveBakeMap(Operator):
         return {'FINISHED'}
 
 
+class T4A_OT_ApplyPresetFromJSON(Operator):
+    """Apply preset from JSON file to all materials"""
+    bl_idname = "t4a.apply_preset_from_json"
+    bl_label = "Apply Preset from JSON"
+    bl_description = "Apply the selected preset configuration to materials"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    preset_id: bpy.props.StringProperty(
+        name="Preset ID",
+        description="ID of the preset to apply",
+        default=""
+    )
+    
+    def execute(self, context):
+        props = context.scene.t4a_baker_props
+        
+        # Use parameter or get from props
+        preset_id = self.preset_id if self.preset_id else props.preset_selection
+        
+        if not preset_id or preset_id == 'NONE':
+            self.report({'WARNING'}, "No preset selected")
+            return {'CANCELLED'}
+        
+        # Find the current object item in the hierarchy
+        if not props.collections or props.active_collection_index >= len(props.collections):
+            # No hierarchy, do nothing silently
+            return {'CANCELLED'}
+        
+        coll_item = props.collections[props.active_collection_index]
+        
+        if not coll_item.objects or coll_item.active_object_index >= len(coll_item.objects):
+            return {'CANCELLED'}
+        
+        obj_item = coll_item.objects[coll_item.active_object_index]
+        
+        # Apply preset to all materials of this object
+        applied_count = 0
+        for mat_item in obj_item.materials:
+            if PresetLoader.apply_preset_to_material(preset_id, mat_item):
+                applied_count += 1
+        
+        if applied_count > 0:
+            preset = PresetLoader.get_preset(preset_id)
+            preset_name = preset['name'] if preset else preset_id
+            self.report({'INFO'}, f"Applied '{preset_name}' to {applied_count} material(s)")
+        else:
+            self.report({'WARNING'}, f"Preset '{preset_id}' not found")
+        
+        return {'FINISHED'}
+
+
 class T4A_OT_ApplyPBRPreset(Operator):
-    """Apply PBR preset to selected material"""
+    """Legacy operator - redirects to new JSON preset system"""
     bl_idname = "t4a.apply_pbr_preset"
     bl_label = "Apply PBR Preset"
     bl_description = "Apply the selected PBR preset to the active material"
     bl_options = {'REGISTER', 'UNDO'}
     
     def execute(self, context):
-        props = context.scene.t4a_baker_props
-        
-        if not props.materials or props.active_material_index >= len(props.materials):
-            self.report({'WARNING'}, "No material selected")
-            return {'CANCELLED'}
-        
-        mat_item = props.materials[props.active_material_index]
-        
-        # Get preset from unified preset_selection property
-        preset = props.preset_selection
-        
-        # Skip custom presets (they are loaded via file)
-        if preset.startswith('CUSTOM_'):
-            self.report({'INFO'}, "Custom preset already loaded from file")
-            return {'FINISHED'}
-        
-        if preset == 'CUSTOM':
-            self.report({'INFO'}, "Custom preset - manually configure maps")
-            return {'FINISHED'}
-        
-        preset_maps = PBR_PRESETS.get(preset, PBR_PRESETS['STANDARD'])
-        
-        # Clear existing maps
-        mat_item.maps.clear()
-        
-        # Add preset maps
-        for map_type, suffix in preset_maps:
-            map_item = mat_item.maps.add()
-            map_item.map_type = map_type
-            map_item.file_suffix = suffix
-            map_item.enabled = True
-            map_item.output_format = 'PNG'
-            map_item.resolution = 1024
-        
-        self.report({'INFO'}, f"Applied {preset} preset to {mat_item.name}")
-        return {'FINISHED'}
+        # Redirect to new system
+        return bpy.ops.t4a.apply_preset_from_json()
 
 
 # Registration
 classes = (
     T4A_OT_RefreshMaterialList,
+    T4A_OT_ApplyPresetFromJSON,
     T4A_OT_ApplyPBRPreset,
     T4A_OT_AddBakeMap,
     T4A_OT_RemoveBakeMap,

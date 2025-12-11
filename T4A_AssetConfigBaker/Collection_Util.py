@@ -121,12 +121,27 @@ class T4A_OT_RefreshObjectList(Operator):
         # Clear existing list
         coll_item.objects.clear()
         
+        # Get preset configuration
+        from . import PresetLoader
+        preset_id = props.preset_selection if props.preset_selection and props.preset_selection != 'NONE' else 'standard'
+        
         # Add all MESH objects from collection
         for obj in collection.objects:
             if obj.type == 'MESH':
                 obj_item = coll_item.objects.add()
                 obj_item.name = obj.name
                 obj_item.enabled = True
+                
+                # Populate materials for this object
+                if hasattr(obj.data, 'materials'):
+                    for mat in obj.data.materials:
+                        if mat:
+                            mat_item = obj_item.materials.add()
+                            mat_item.name = mat.name
+                            mat_item.enabled = True
+                            
+                            # Apply preset from JSON
+                            PresetLoader.apply_preset_to_material(preset_id, mat_item)
         
         self.report({'INFO'}, f"Loaded {len(coll_item.objects)} object(s) from {coll_item.name}")
         return {'FINISHED'}

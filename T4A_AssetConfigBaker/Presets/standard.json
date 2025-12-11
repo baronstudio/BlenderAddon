@@ -1,0 +1,43 @@
+{
+  "id": "standard",
+  "name": "Standard PBR",
+  "description": "Standard PBR texture set with core maps",
+  "version": "1.0",
+  "maps": [
+    {
+      "map_type": "ALBEDO",
+      "file_suffix": "_albedo",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "NORMAL_GL",
+      "file_suffix": "_normal_gl",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "METALLIC",
+      "file_suffix": "_metallic",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "ROUGHNESS",
+      "file_suffix": "_roughness",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    },
+    {
+      "map_type": "OCCLUSION",
+      "file_suffix": "_occlusion",
+      "enabled": true,
+      "output_format": "PNG",
+      "resolution": 1024
+    }
+  ]
+}

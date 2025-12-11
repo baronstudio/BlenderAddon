@@ -92,33 +92,39 @@ class T4A_OT_SaveBakingPreset(Operator):
             self.report({'ERROR'}, "Preset name cannot be empty")
             return {'CANCELLED'}
         
-        if not props.materials:
+        # Find the current object item in the hierarchy
+        if not props.collections or props.active_collection_index >= len(props.collections):
+            self.report({'WARNING'}, "No collection selected")
+            return {'CANCELLED'}
+        
+        coll_item = props.collections[props.active_collection_index]
+        
+        if not coll_item.objects or coll_item.active_object_index >= len(coll_item.objects):
+            self.report({'WARNING'}, "No object selected")
+            return {'CANCELLED'}
+        
+        obj_item = coll_item.objects[coll_item.active_object_index]
+        
+        if not obj_item.materials:
             self.report({'WARNING'}, "No materials to save. Configure materials first.")
             return {'CANCELLED'}
         
-        # Build preset data
-        preset_data = {
-            'version': '1.0',
-            'name': self.preset_name,
-            'description': f"Custom preset with {len(props.materials)} material(s)",
-            'materials': []
-        }
+        # Use PresetLoader to save the preset
+        from . import PresetLoader
         
-        # Serialize all materials
-        for mat_item in props.materials:
-            mat_config = serialize_material_config(mat_item)
-            preset_data['materials'].append(mat_config)
-        
-        # Save to file
         try:
-            filepath = get_preset_filepath(self.preset_name)
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(preset_data, f, indent=2, ensure_ascii=False)
+            # Extract materials data (first material as template)
+            materials_data = []
+            if obj_item.materials:
+                materials_data.append(obj_item.materials[0])
             
-            self.report({'INFO'}, f"Preset saved: {filepath.name}")
+            # Save using PresetLoader
+            preset_id = PresetLoader.save_custom_preset(self.preset_name, materials_data)
             
-            # Refresh preset list
-            bpy.ops.t4a.refresh_preset_list()
+            self.report({'INFO'}, f"Preset saved: {self.preset_name} ({preset_id})")
+            
+            # Update the selected preset to the newly created one
+            props.preset_selection = preset_id
             
             return {'FINISHED'}
         
@@ -166,12 +172,25 @@ class T4A_OT_LoadBakingPreset(Operator):
             with open(filepath, 'r', encoding='utf-8') as f:
                 preset_data = json.load(f)
             
-            # Clear current materials
-            props.materials.clear()
+            # Find the current object item in the hierarchy
+            if not props.collections or props.active_collection_index >= len(props.collections):
+                self.report({'WARNING'}, "No collection selected")
+                return {'CANCELLED'}
+            
+            coll_item = props.collections[props.active_collection_index]
+            
+            if not coll_item.objects or coll_item.active_object_index >= len(coll_item.objects):
+                self.report({'WARNING'}, "No object selected")
+                return {'CANCELLED'}
+            
+            obj_item = coll_item.objects[coll_item.active_object_index]
+            
+            # Clear current materials for this object
+            obj_item.materials.clear()
             
             # Apply preset to materials
             for mat_config in preset_data.get('materials', []):
-                new_mat = props.materials.add()
+                new_mat = obj_item.materials.add()
                 deserialize_material_config(mat_config, new_mat)
             
             # Update the selected preset (with CUSTOM_ prefix)
@@ -194,38 +213,34 @@ class T4A_OT_DeleteBakingPreset(Operator):
     
     def invoke(self, context, event):
         props = context.scene.t4a_baker_props
-        if not props.preset_selection.startswith('CUSTOM_'):
-            self.report({'ERROR'}, "No custom preset selected")
+        preset_id = props.preset_selection
+        
+        # Check if it's a custom preset (user-created, not built-in)
+        from . import PresetLoader
+        preset = PresetLoader.get_preset(preset_id)
+        
+        if not preset or not preset.get('is_custom', False):
+            self.report({'ERROR'}, "Cannot delete built-in presets")
             return {'CANCELLED'}
+        
         return context.window_manager.invoke_confirm(self, event)
     
     def execute(self, context):
         props = context.scene.t4a_baker_props
+        preset_id = props.preset_selection
         
-        if not props.preset_selection.startswith('CUSTOM_'):
-            self.report({'ERROR'}, "No custom preset selected")
-            return {'CANCELLED'}
-        
-        # Extract preset ID (remove 'CUSTOM_' prefix)
-        preset_name = props.preset_selection[7:]
+        from . import PresetLoader
         
         try:
-            filepath = get_preset_filepath(preset_name)
-            
-            if filepath.exists():
-                filepath.unlink()
-                self.report({'INFO'}, f"Preset deleted: {preset_name}")
+            if PresetLoader.delete_preset(preset_id):
+                self.report({'INFO'}, f"Preset deleted: {preset_id}")
                 
                 # Reset selection to default preset
-                props.preset_selection = 'STANDARD'
-                
-                # Force UI update
-                for area in context.screen.areas:
-                    area.tag_redraw()
+                props.preset_selection = 'standard'
                 
                 return {'FINISHED'}
             else:
-                self.report({'ERROR'}, f"Preset not found: {preset_name}")
+                self.report({'ERROR'}, f"Failed to delete preset: {preset_id}")
                 return {'CANCELLED'}
         
         except Exception as e:

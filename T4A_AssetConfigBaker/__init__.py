@@ -37,11 +37,16 @@ bl_info = {
 }
 
 from . import auto_load
+from . import PresetLoader
 
 auto_load.init()
 
 def register():
     auto_load.register()
+    # Load presets at addon startup
+    PresetLoader.load_all_presets()
+    print("[T4A] Addon registered and presets loaded")
 
 def unregister():
     auto_load.unregister()
+    print("[T4A] Addon unregistered")

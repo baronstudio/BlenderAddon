@@ -27,6 +27,13 @@ class T4A_AddonPreferences(AddonPreferences):
         subtype='DIR_PATH'
     )
     
+    presets_path: StringProperty(
+        name="Presets Path",
+        description="Path to the folder containing preset JSON files",
+        default="",
+        subtype='DIR_PATH'
+    )
+    
     # Performance settings
     use_gpu_baking: BoolProperty(
         name="Use GPU for Baking",
@@ -89,6 +96,7 @@ class T4A_AddonPreferences(AddonPreferences):
         box.label(text="Export Paths:", icon='FILE_FOLDER')
         box.prop(self, "default_export_path")
         box.prop(self, "texture_output_path")
+        box.prop(self, "presets_path")
         
         layout.separator()
         

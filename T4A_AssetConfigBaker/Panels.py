@@ -240,6 +240,8 @@ class T4A_PT_MainPanel(bpy.types.Panel):
         box = layout.box()
         box.label(text="Export:", icon='EXPORT')
         col = box.column(align=True)
+        #operator d'export GLB à implémenter
+        
         col.label(text="GLB Export (Coming soon)")
 
 

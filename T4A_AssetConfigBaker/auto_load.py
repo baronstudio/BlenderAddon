@@ -57,6 +57,8 @@ MODULE_LOAD_ORDER = [
     "Baker_General",
     "PresetManager",
     "Collection_Util",
+    "Operators_Export",
+    "3Dexport_V1",
     "UI_Util",
     "Panels"
 ]

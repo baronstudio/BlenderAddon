@@ -238,11 +238,55 @@ class T4A_PT_MainPanel(bpy.types.Panel):
         
         # Export section
         box = layout.box()
-        box.label(text="Export:", icon='EXPORT')
-        col = box.column(align=True)
-        #operator d'export GLB à implémenter
+        box.label(text="3D Export:", icon='EXPORT')
         
-        col.label(text="GLB Export (Coming soon)")
+        # UIList for collections export
+        row = box.row()
+        row.template_list(
+            "T4A_UL_CollectionExportList", "",
+            props, "export_collections",
+            props, "active_export_collection_index",
+            rows=3
+        )
+        
+        # Buttons for export list management
+        col = row.column(align=True)
+        col.operator("t4a.refresh_export_collection_list", icon='FILE_REFRESH', text="")
+        col.operator("t4a.add_sel_export_coll_item", icon='ADD', text="")
+        col.operator("t4a.dell_export_coll_item", icon='REMOVE', text="")
+        
+        # GLB Export options for selected collection
+        if props.export_collections and props.active_export_collection_index < len(props.export_collections):
+            coll_item = props.export_collections[props.active_export_collection_index]
+            
+            box.separator()
+            export_box = box.box()
+            export_box.enabled = coll_item.enabled
+            export_box.label(text=f"GLB Options: {coll_item.name}", icon='SETTINGS')
+            
+            col = export_box.column(align=True)
+            col.prop(coll_item, "export_format")
+            col.separator()
+            col.prop(coll_item, "export_apply_modifiers")
+            col.prop(coll_item, "export_materials")
+            col.separator()
+            col.prop(coll_item, "export_colors")
+            col.prop(coll_item, "export_cameras")
+            col.prop(coll_item, "export_lights")
+            col.separator()
+            col.prop(coll_item, "export_yup")
+        
+        box.separator()
+        
+        # Export buttons
+        col = box.column(align=True)
+        col.operator("t4a.export_all_collections", text="Export All Collections", icon='EXPORT')
+        
+        # Single collection export (if one is selected)
+        if props.export_collections and props.active_export_collection_index < len(props.export_collections):
+            coll_item = props.export_collections[props.active_export_collection_index]
+            op = col.operator("t4a.export_collection_glb", text=f"Export '{coll_item.name}'", icon='FILE_3D')
+            op.collection_name = coll_item.name
 
 
 # Sub-panel: 3D Baking Options
@@ -463,6 +507,27 @@ class T4A_UL_MaterialBakeMapList(bpy.types.UIList):
             layout.label(text="", icon='TEXTURE')
 
 
+# UIList for collection export management
+class T4A_UL_CollectionExportList(bpy.types.UIList):
+    """UIList for collections to export as GLB"""
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row(align=True)
+            row.prop(item, "enabled", text="", icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
+            row.label(text=item.name, icon='OUTLINER_COLLECTION')
+            
+            # Show export format icon
+            if item.export_format == 'GLB':
+                row.label(text="", icon='FILE_3D')
+            elif item.export_format == 'GLTF_SEPARATE':
+                row.label(text="", icon='FILE_FOLDER')
+            elif item.export_format == 'GLTF_EMBEDDED':
+                row.label(text="", icon='FILE_ARCHIVE')
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon='OUTLINER_COLLECTION')
+
+
 # Registration
 classes = (
     T4A_PT_MainPanel,
@@ -472,6 +537,7 @@ classes = (
     T4A_UL_ObjectBakeList,
     T4A_UL_MaterialBakeMapList,
     T4A_UL_MaterialBakeList,
+    T4A_UL_CollectionExportList,
     T4A_PT_InfoPanel,
 )
 

@@ -271,6 +271,72 @@ class T4A_CollectionBakeItem(PropertyGroup):
                             PresetLoader.apply_preset_to_material(preset_id, mat_item)
 
 
+class T4A_CollectionExportItem(PropertyGroup):
+    """Represents a collection to export as GLB"""
+    name: StringProperty(
+        name="Collection Name",
+        description="Name of the collection"
+    )
+    enabled: BoolProperty(
+        name="Enable",
+        description="Enable this collection for export",
+        default=True
+    )
+    
+    # ===== GLB EXPORT OPTIONS =====
+    export_format: EnumProperty(
+        name="Export Format",
+        description="GLB export format",
+        items=[
+            ('GLB', "GLB (Binary)", "Binary GLTF format (single file)"),
+            ('GLTF_SEPARATE', "glTF Separate", "glTF with separate textures"),
+            ('GLTF_EMBEDDED', "glTF Embedded", "glTF with embedded textures"),
+        ],
+        default='GLB'
+    )
+    
+    export_apply_modifiers: BoolProperty(
+        name="Apply Modifiers",
+        description="Apply modifiers during export",
+        default=True
+    )
+    
+    export_materials: EnumProperty(
+        name="Materials",
+        description="Export materials",
+        items=[
+            ('EXPORT', "Export", "Export all materials"),
+            ('PLACEHOLDER', "Placeholder", "Export placeholder materials"),
+            ('NONE', "None", "Do not export materials"),
+        ],
+        default='EXPORT'
+    )
+    
+    export_colors: BoolProperty(
+        name="Vertex Colors",
+        description="Export vertex colors",
+        default=True
+    )
+    
+    export_cameras: BoolProperty(
+        name="Cameras",
+        description="Export cameras",
+        default=False
+    )
+    
+    export_lights: BoolProperty(
+        name="Lights",
+        description="Export lights",
+        default=False
+    )
+    
+    export_yup: BoolProperty(
+        name="Use +Y Up",
+        description="Export with Y axis as up (default is Z up)",
+        default=True
+    )
+
+
 class T4A_BakerProperties(PropertyGroup):
     """Main property group for T4A Baker addon"""
     
@@ -447,6 +513,20 @@ class T4A_BakerProperties(PropertyGroup):
         default=0
     )
     
+    # ===== 3D EXPORT UI DATA =====
+    
+    export_collections: CollectionProperty(
+        type=T4A_CollectionExportItem,
+        name="Export Collections",
+        description="List of collections to export as GLB"
+    )
+    
+    active_export_collection_index: IntProperty(
+        name="Active Export Collection Index",
+        description="Index of the active export collection in the list",
+        default=0
+    )
+    
     # ===== MATERIAL BAKING UI DATA =====
     
     preset_selection: EnumProperty(
@@ -479,6 +559,7 @@ classes = (
     T4A_MaterialBakeItem,
     T4A_ObjectBakeItem,
     T4A_CollectionBakeItem,
+    T4A_CollectionExportItem,
     T4A_BakerProperties,
 )
 

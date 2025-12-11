@@ -9,13 +9,17 @@
       "file_suffix": "_albedo",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
       "map_type": "NORMAL_GL",
-      "file_suffix": "_normal",
+      "file_suffix": "_normal_gl",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -23,6 +27,8 @@
       "file_suffix": "_occlusion",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -30,6 +36,8 @@
       "file_suffix": "_roughness",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -37,7 +45,9 @@
       "file_suffix": "_metallic",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
-    }
+    },
   ]
 }

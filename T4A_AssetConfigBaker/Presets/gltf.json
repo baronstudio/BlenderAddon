@@ -9,6 +9,8 @@
       "file_suffix": "_basecolor",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -16,6 +18,8 @@
       "file_suffix": "_normal",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -23,6 +27,8 @@
       "file_suffix": "_occlusion",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -30,6 +36,8 @@
       "file_suffix": "_roughness",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -37,6 +45,8 @@
       "file_suffix": "_metallic",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     }
   ]

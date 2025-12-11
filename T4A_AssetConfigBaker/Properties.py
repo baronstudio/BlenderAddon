@@ -16,6 +16,38 @@ from bpy.props import (
 )
 
 
+
+
+
+def convert_view_transform_to_blender(view_transform_enum):
+    """Convert our enum identifier back to Blender's view transform identifier"""
+    if view_transform_enum == 'FOLLOW_SCENE':
+        return None  # Special case: use scene settings
+    
+    # Mapping dictionary for known conversions
+    conversion_map = {
+        'STANDARD': 'Standard',
+        'ACES_1_3': 'ACES 1.3',
+        'ACES_2_0': 'ACES 2.0',
+        'KHRONOS_PBR_NEUTRAL': 'Khronos PBR Neutral',
+        'FILMIC': 'Filmic',
+        'FILMIC_LOG': 'Filmic Log',
+        'RAW': 'Raw',
+        'FALSE_COLOR': 'False Color',
+        'AGX': 'AgX',
+        'AGX_PUNCHY': 'AgX Punchy',
+    }
+    
+    # Try direct mapping first
+    if view_transform_enum in conversion_map:
+        return conversion_map[view_transform_enum]
+    
+    # Otherwise, convert back: UPPERCASE_WITH_UNDERSCORES -> Title Case With Spaces
+    return view_transform_enum.replace('_', ' ').title()
+
+
+
+
 class T4A_MaterialBakeMapSettings(PropertyGroup):
     """Settings for individual bake map (diffuse, normal, etc.)"""
     map_type: EnumProperty(
@@ -64,6 +96,37 @@ class T4A_MaterialBakeMapSettings(PropertyGroup):
         ],
         default='PNG'
     )
+    
+    color_depth: EnumProperty(
+        name="Color Depth",
+        description="Bit depth for the image",
+        items=[
+            ('8', "8-bit", "8 bits per channel"),
+            ('16', "16-bit", "16 bits per channel"),
+            ('32', "32-bit", "32 bits per channel (float)"),
+        ],
+        default='8'
+    )
+    
+    view_transform: EnumProperty(
+        name="View Transform",
+        description="Color management view transform",
+        items= [
+        ('FOLLOW_SCENE', "Follow Scene", "Use scene color management settings"),
+        ('STANDARD', "Standard", "Standard sRGB display"),
+        ('ACES_1_3', "ACES 1.3", "ACES 1.3 color management"),
+        ('ACES_2_0', "ACES 2.0", "ACES 2.0 color management"),
+        ('KHRONOS_PBR_NEUTRAL', "Khronos PBR Neutral", "Khronos PBR Neutral color space"),
+        ('FILMIC', "Filmic", "Filmic view transform"),
+        ('FILMIC_LOG', "Filmic Log", "Filmic Log encoding"),
+        ('RAW', "Raw", "Raw (no color management)"),
+        ('FALSE_COLOR', "False Color", "False color heat map"),
+        ('AGX', "AgX", "AgX view transform"),
+        ('AGX_PUNCHY', "AgX Punchy", "AgX Punchy view transform"),
+    ],
+        default=0
+    )
+    
     resolution: IntProperty(
         name="Resolution",
         description="Resolution for this map",

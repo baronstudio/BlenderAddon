@@ -306,10 +306,53 @@ class T4A_OT_PrepareCyclesBaking(Operator):
 
         return {'FINISHED'}
 
+class T4A_OT_SetImageSaveOptions(Operator):
+    """Set image save options for baked images"""
+    bl_idname = "t4a.set_image_save_options"
+    bl_label = "Set Image Save Options"
+    bl_description = "Configure image save options for baked images" 
+    bl_options = {'REGISTER', 'UNDO'}
+
+    # Property to pass the object name to bake
+    view_transform_Mode_output: bpy.props.StringProperty(
+        name="View Transform",
+        description="View Transform for the baked image (FOLLOW_SCENE or OVERRIDE)",
+        default="FOLLOW_SCENE"
+    )
+    depth_output: bpy.props.StringProperty(
+        name="Depth_Output",
+        description="Depth Output for the baked image (8, 16, or 32 bits)",
+        default='8'
+    )
+    view_transform_output: bpy.props.StringProperty(
+        name="View Transform",
+        description="View Transform for the baked image (Standard or Agx or others)",
+        default="Standard"
+    )
+    format_output: bpy.props.StringProperty(
+        name="Format Output",
+        description="Format Output for the baked image (PNG, JPEG, etc.)",
+        default="JPEG"
+    )
+
+
+    def execute(self, context):
+        scene = context.scene
+        #props = scene.t4a_baker_props
+
+        scene.render.image_settings.color_management = self.view_transform_Mode_output
+        scene.render.image_settings.view_settings.view_transform = self.view_transform_output
+        scene.render.image_settings.color_depth = self.depth_output
+        
+        
+        return {'FINISHED'}
+
+
 # Système d'autoload : expose uniquement le tuple classes
 classes = (
     T4A_OT_Bakeconfiguration,
     T4A_OT_PrepareCyclesBaking,
+    T4A_OT_SetImageSaveOptions,
 )
 
 def register():

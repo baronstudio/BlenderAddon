@@ -188,7 +188,25 @@ class T4A_PT_MainPanel(bpy.types.Panel):
                         sub.enabled = maps_section_enabled
                         sub.prop(map_item, "enabled")
                         sub.prop(map_item, "map_type")
-                        sub.prop(map_item, "output_format")
+                        
+                        # Format settings
+                        row = sub.row(align=True)
+                        row.prop(map_item, "output_format")
+                        
+                        # Show color depth based on format
+                        fmt = map_item.output_format
+                        if fmt in ('PNG', 'TIFF'):
+                            row.prop(map_item, "color_depth", text="")
+                        elif fmt == 'JPEG':
+                            # JPEG only supports 8-bit
+                            sub.label(text="(8-bit)", icon='INFO')
+                        elif fmt == 'OPEN_EXR':
+                            # EXR only supports 16/32-bit float
+                            row.prop(map_item, "color_depth", text="")
+                        
+                        # Color Management
+                        sub.prop(map_item, "view_transform")
+                        
                         sub.prop(map_item, "resolution")
                 else:
                     box.label(text="No materials in selected object", icon='INFO')

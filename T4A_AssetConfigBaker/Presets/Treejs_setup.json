@@ -10,6 +10,8 @@
       "file_suffix": "_Albedo",
       "enabled": true,
       "output_format": "JPEG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -17,6 +19,8 @@
       "file_suffix": "_NormalGL",
       "enabled": true,
       "output_format": "PNG",
+      "color_depth": "16",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -24,6 +28,8 @@
       "file_suffix": "_Metallic",
       "enabled": true,
       "output_format": "JPEG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -31,6 +37,8 @@
       "file_suffix": "_Roughness",
       "enabled": true,
       "output_format": "JPEG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -38,6 +46,8 @@
       "file_suffix": "_Occlusion",
       "enabled": true,
       "output_format": "JPEG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     },
     {
@@ -45,6 +55,8 @@
       "file_suffix": "_Emission",
       "enabled": true,
       "output_format": "JPEG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
     }
   ]

@@ -9,7 +9,7 @@ import time
 import os
 from . import BakeTypeMapper
 from .Baker_General import clean_blender_name
-
+from .Properties import convert_view_transform_to_blender
 
 
 
@@ -128,13 +128,43 @@ class T4A_OT_BakerMat(Operator):
                 total_bakes += 1
                 bake_type = map_item.map_type
                 output_format = map_item.output_format
+                color_depth = map_item.color_depth
                 resolution = map_item.resolution
+                ### not working yet ### need to dev other part of the code
+                viewtransform = convert_view_transform_to_blender(map_item.view_transform)
+                if not viewtransform:
+                    viewtransform = 'FOLLOW_SCENE'
+                #print(f"View Transform for baking {obj.name} // {mat.name} :", viewtransform)
                 
                 self.report({'INFO'}, f"Baking {bake_type} for material '{mat_name}' at {resolution}x{resolution}...")
                 
                 # Crée une image temporaire pour le baking
                 img_name = f"{mat_name}_{bake_type}"
-                img = bpy.data.images.new(img_name, width=resolution, height=resolution)
+                
+                # Create image with appropriate settings based on format
+                # Determine float buffer and depth
+                use_float = False
+                is_32bit = color_depth == '32'
+                
+                if output_format == 'OPEN_EXR':
+                    use_float = True
+                    is_32bit = (color_depth == '32')
+                elif output_format in ('PNG', 'TIFF'):
+                    # PNG/TIFF can be 8, 16, or 32-bit
+                    use_float = (color_depth == '32')
+                    is_32bit = (color_depth == '32')
+                # JPEG is always 8-bit
+
+
+                
+                img = bpy.data.images.new(
+                    img_name, 
+                    width=resolution, 
+                    height=resolution,
+                    alpha=True,
+                    float_buffer=use_float,
+                    is_data=(bake_type not in ['ALBEDO', 'DIFFUSE', 'COMBINED'])
+                )
 
                 # Attribue l'image à un node du matériau
                 nodes = mat.node_tree.nodes
@@ -161,6 +191,13 @@ class T4A_OT_BakerMat(Operator):
                 context.scene.render.bake.use_clear = True
                 context.scene.render.bake.margin = 16
                 
+                # Updating image rendering settings for view transform and image depth
+                if viewtransform != 'FOLLOW_SCENE': 
+                    bpy.ops.t4a.set_image_save_options(view_transform_Mode_output='OVERRIDE',
+                                                      depth_output=color_depth, view_transform_output = viewtransform)
+                else:
+                    bpy.ops.t4a.set_image_save_options(view_transform_Mode_output='FOLLOW_SCENE',
+                                                      depth_output=color_depth) #, view_transform_output = viewtransform)
                 # Lance le baking avec le type Cycles approprié
                 try:
                     bpy.ops.object.bake(type=cycles_bake_type)
@@ -218,6 +255,7 @@ class T4A_OT_BakerMat(Operator):
                 file_path = os.path.join(output_dir, f"{clean_mat_name}{suffix}.{ext}")
                 img.filepath_raw = file_path
                 img.file_format = output_format
+                
                 try:
                     img.save()
                     self.report({'INFO'}, f"Saved: {file_path}")

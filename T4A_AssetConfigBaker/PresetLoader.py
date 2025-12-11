@@ -120,6 +120,8 @@ def apply_preset_to_material(preset_id, mat_item):
         map_item.file_suffix = map_config.get('file_suffix', '')
         map_item.enabled = map_config.get('enabled', True)
         map_item.output_format = map_config.get('output_format', 'PNG')
+        map_item.color_depth = map_config.get('color_depth', '8')
+        map_item.view_transform = map_config.get('view_transform', 'FOLLOW_SCENE')
         map_item.resolution = map_config.get('resolution', 1024)
     
     return True
@@ -151,6 +153,8 @@ def save_custom_preset(preset_name, materials_data):
                 'file_suffix': map_item.file_suffix,
                 'enabled': map_item.enabled,
                 'output_format': map_item.output_format,
+                'color_depth': map_item.color_depth,
+                'view_transform': map_item.view_transform,
                 'resolution': map_item.resolution
             })
     

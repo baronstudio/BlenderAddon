@@ -17,6 +17,13 @@ class T4A_OT_BakerMat(Operator):
     bl_description = "Execute material baking process for selected objects"
     bl_options = {'REGISTER', 'UNDO'}
     
+    # Property to pass the object name to bake
+    target_object: bpy.props.StringProperty(
+        name="Target Object",
+        description="Name of the object to bake (if empty, uses active object)",
+        default=""
+    )
+    
     def execute(self, context):
         props = context.scene.t4a_baker_props
         prefs = context.preferences.addons[__package__].preferences
@@ -24,7 +31,23 @@ class T4A_OT_BakerMat(Operator):
         props.is_baking = True
         self.report({'INFO'}, "Starting material baking process...")
 
+        # Use target_object if specified, otherwise use active object
+        if self.target_object:
+            obj = bpy.data.objects.get(self.target_object)
+            if not obj:
+                self.report({'WARNING'}, f"Object '{self.target_object}' not found")
+                props.is_baking = False
+                return {'CANCELLED'}
+            else:
+                obj = bpy.data.objects.get(self.target_object)
+        else:
+            obj = context.active_object
+
+        #force use of target_object
+        #obj = bpy.data.objects.get(self.target_object)
+        props.is_baking = False
         obj = context.active_object
+
         if not obj or not obj.data or not hasattr(obj.data, 'materials'):
             self.report({'WARNING'}, "No active object with materials found")
             props.is_baking = False
@@ -43,10 +66,7 @@ class T4A_OT_BakerMat(Operator):
         total_bakes = 0
         successful_bakes = 0
 
-        # S'assure que l'objet est sélectionné pour le baking
-        bpy.ops.object.select_all(action='DESELECT')
-        obj.select_set(True)
-        context.view_layer.objects.active = obj
+        #a ce stade l'object a baker est selectioner dans la boucle supperieur de Baker_General.py 
 
         # Mémorise l'ordre original des matériaux pour restauration ultérieure
         original_materials_order = [mat for mat in obj.data.materials if mat]
@@ -78,6 +98,7 @@ class T4A_OT_BakerMat(Operator):
                 obj.active_material_index = 0
                     #bpy.context.object.active_material_index = mat_index
                     #bpy.ops.object.material_slot_assign()
+                bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
             if not mat:
                 self.report({'WARNING'}, f"Material '{mat_name}' not found in scene. Skipping.")
@@ -129,7 +150,7 @@ class T4A_OT_BakerMat(Operator):
                 context.scene.render.bake.use_selected_to_active = False
                 context.scene.render.bake.use_clear = True
                 context.scene.render.bake.margin = 16
-
+                
                 # Lance le baking avec le type Cycles approprié
                 try:
                     bpy.ops.object.bake(type=cycles_bake_type)
@@ -163,7 +184,23 @@ class T4A_OT_BakerMat(Operator):
                 
                 # Utilise le suffix personnalisé ou génère un par défaut
                 suffix = map_item.file_suffix if map_item.file_suffix else f"_{bake_type.lower()}"
-                file_path = bpy.path.abspath(f"//{mat_name}{suffix}.{ext}")
+                
+                # Construit le chemin hiérarchique : base_path/collection/object/
+                base_path = bpy.path.abspath(prefs.default_export_path)
+                
+                # Détermine la collection de l'objet
+                collection_name = "Uncategorized"
+                for coll in bpy.data.collections:
+                    if obj.name in coll.objects:
+                        collection_name = coll.name
+                        break
+                
+                # Crée la structure de dossiers
+                output_dir = os.path.join(base_path, collection_name, obj.name)
+                os.makedirs(output_dir, exist_ok=True)
+                
+                # Chemin complet du fichier
+                file_path = os.path.join(output_dir, f"{mat_name}{suffix}.{ext}")
                 img.filepath_raw = file_path
                 img.file_format = output_format
                 try:

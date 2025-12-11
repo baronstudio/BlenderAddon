@@ -73,6 +73,85 @@ class T4A_MaterialBakeMapSettings(PropertyGroup):
     )
 
 
+class T4A_ObjectBakeItem(PropertyGroup):
+    """Represents an object to bake"""
+    name: StringProperty(
+        name="Object Name",
+        description="Name of the object"
+    )
+    enabled: BoolProperty(
+        name="Enable",
+        description="Enable this object for baking",
+        default=True
+    )
+
+
+class T4A_CollectionBakeItem(PropertyGroup):
+    """Represents a collection to bake"""
+    name: StringProperty(
+        name="Collection Name",
+        description="Name of the collection"
+    )
+    enabled: BoolProperty(
+        name="Enable",
+        description="Enable this collection for baking",
+        default=True
+    )
+    objects: CollectionProperty(
+        type=T4A_ObjectBakeItem,
+        name="Objects",
+        description="List of objects in this collection"
+    )
+    active_object_index: IntProperty(
+        name="Active Object Index",
+        description="Index of the active object in the list",
+        default=0,
+        update=lambda self, context: self.on_active_object_changed(context)
+    )
+    
+    def on_active_object_changed(self, context):
+        """Callback when active object index changes - select and make active in 3D view"""
+        if self.objects and 0 <= self.active_object_index < len(self.objects):
+            obj_item = self.objects[self.active_object_index]
+            obj = bpy.data.objects.get(obj_item.name)
+            
+            if obj:
+                # Deselect all objects
+                bpy.ops.object.select_all(action='DESELECT')
+                
+                # Select and make active
+                obj.select_set(True)
+                context.view_layer.objects.active = obj
+                
+                # Refresh material list for this object
+                props = context.scene.t4a_baker_props
+                props.materials.clear()
+                
+                # Get preset configuration
+                preset = props.preset_selection if not props.preset_selection.startswith('CUSTOM_') else 'STANDARD'
+                
+                # Import here to avoid circular dependency
+                from . import UI_Util
+                preset_maps = UI_Util.PBR_PRESETS.get(preset, UI_Util.PBR_PRESETS['STANDARD'])
+                
+                # Add all materials from the newly active object
+                if hasattr(obj.data, 'materials'):
+                    for mat in obj.data.materials:
+                        if mat:
+                            mat_item = props.materials.add()
+                            mat_item.name = mat.name
+                            mat_item.enabled = True
+                            
+                            # Add maps based on preset
+                            for map_type, suffix in preset_maps:
+                                map_item = mat_item.maps.add()
+                                map_item.map_type = map_type
+                                map_item.file_suffix = suffix
+                                map_item.enabled = True
+                                map_item.output_format = 'PNG'
+                                map_item.resolution = 1024
+
+
 class T4A_MaterialBakeItem(PropertyGroup):
     """Represents a material with its bake maps configuration"""
     name: StringProperty(
@@ -257,6 +336,20 @@ class T4A_BakerProperties(PropertyGroup):
         max=500000
     )
     
+    # ===== 3D BAKING UI DATA =====
+    
+    collections: CollectionProperty(
+        type=T4A_CollectionBakeItem,
+        name="Collections",
+        description="List of collections to bake"
+    )
+    
+    active_collection_index: IntProperty(
+        name="Active Collection Index",
+        description="Index of the active collection in the list",
+        default=0
+    )
+    
     # ===== MATERIAL BAKING UI DATA =====
     
     preset_selection: EnumProperty(
@@ -314,6 +407,8 @@ class T4A_BakerProperties(PropertyGroup):
 # Registration
 classes = (
     T4A_MaterialBakeMapSettings,
+    T4A_ObjectBakeItem,
+    T4A_CollectionBakeItem,
     T4A_MaterialBakeItem,
     T4A_BakerProperties,
 )

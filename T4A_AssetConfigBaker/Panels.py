@@ -40,10 +40,48 @@ class T4A_PT_MainPanel(bpy.types.Panel):
         # Main content section
         box = layout.box()
         box.label(text="3D Baking:", icon='SHADING_RENDERED')
+        
+        # UIList pour les collections à baker
+        row = box.row()
+        row.template_list(
+            "T4A_UL_CollectionBakeList", "",
+            props, "collections",
+            props, "active_collection_index",
+            rows=3
+        )
+        
+        # Boutons pour gérer la liste des collections
+        col = row.column(align=True)
+        col.operator("t4a.refresh_collection_list", icon='FILE_REFRESH', text="")
+        col.operator("t4a.add_sel_coll_item", icon='ADD', text="")
+        col.operator("t4a.dell_coll_item", icon='REMOVE', text="")
+        
+        # UIList pour les objets de la collection sélectionnée
+        if props.collections and props.active_collection_index < len(props.collections):
+            coll_item = props.collections[props.active_collection_index]
+            
+            box.separator()
+            box.label(text=f"Objects in: {coll_item.name}", icon='OBJECT_DATA')
+            
+            row = box.row()
+            row.template_list(
+                "T4A_UL_ObjectBakeList", "",
+                coll_item, "objects",
+                coll_item, "active_object_index",
+                rows=3
+            )
+            
+            # Boutons pour gérer la liste des objets
+            col = row.column(align=True)
+            col.operator("t4a.refresh_object_list", icon='FILE_REFRESH', text="")
+            col.operator("t4a.add_sel_object_item", icon='ADD', text="")
+            col.operator("t4a.dell_object_item", icon='REMOVE', text="")
+        
+        box.separator()
         col = box.column(align=True)
         
         # Placeholder for Baker_V1 operators
-        col.operator("t4a.baker_example", text="Run 3D Baker", icon='RENDER_STILL')
+        ###col.operator("t4a.baker_example", text="Run 3D Baker", icon='RENDER_STILL')
         
         # Material Baking section
         box = layout.box()
@@ -127,7 +165,10 @@ class T4A_PT_MainPanel(bpy.types.Panel):
         
         box.separator()
         col = box.column(align=True)
-        col.operator("t4a.baker_mat", text="Bake Materials", icon='NODE_MATERIAL')
+        col.operator("t4a.baker_mat", text="Bake Materials (active object)", icon='NODE_MATERIAL')
+        col.operator("t4a.bake_configuration", text="Bake Materials (Full Configuration)", icon='NODE_MATERIAL')
+
+
         
         # Export section
         box = layout.box()
@@ -274,6 +315,28 @@ class T4A_PT_InfoPanel(bpy.types.Panel):
 
 
 # UI Lists
+#uiliste for collection baking management
+class T4A_UL_CollectionBakeList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row(align=True)
+            row.prop(item, "enabled", text="", icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
+            row.label(text=item.name, icon='OUTLINER_COLLECTION')
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon='OUTLINER_COLLECTION')
+
+#uiliste for object baking management
+class T4A_UL_ObjectBakeList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        if self.layout_type in {'DEFAULT', 'COMPACT'}:
+            row = layout.row(align=True)
+            row.prop(item, "enabled", text="", icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
+            row.label(text=item.name, icon='MESH_CUBE')
+        elif self.layout_type in {'GRID'}:
+            layout.alignment = 'CENTER'
+            layout.label(text="", icon='MESH_CUBE')
+
 #uilistes for material baking management
 class T4A_UL_MaterialBakeList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
@@ -302,6 +365,8 @@ classes = (
     T4A_PT_MainPanel,
     T4A_PT_BakerPanel,
     T4A_PT_MaterialBakerPanel,
+    T4A_UL_CollectionBakeList,
+    T4A_UL_ObjectBakeList,
     T4A_UL_MaterialBakeMapList,
     T4A_UL_MaterialBakeList,
     T4A_PT_InfoPanel,

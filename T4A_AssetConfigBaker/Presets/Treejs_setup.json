@@ -58,6 +58,16 @@
       "color_depth": "8",
       "view_transform": "FOLLOW_SCENE",
       "resolution": 1024
+    },
+    {
+      "map_type": "ALPHA",
+      "file_suffix": "_Alpha",
+      "enabled": true,
+      "output_format": "JPEG",
+      "color_depth": "8",
+      "view_transform": "FOLLOW_SCENE",
+      "resolution": 1024
     }
+
   ]
 }

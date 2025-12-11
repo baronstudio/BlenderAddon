@@ -19,6 +19,41 @@ from bpy.props import (
 
 
 
+def get_color_depth_items(self, context):
+    """Get available color depth options based on output format"""
+    fmt = self.output_format
+    
+    if fmt == 'JPEG':
+        # JPEG only supports 8-bit
+        return [('8', "8-bit", "8 bits per channel")]
+    elif fmt == 'PNG':
+        # PNG supports 8-bit and 16-bit
+        return [
+            ('8', "8-bit", "8 bits per channel"),
+            ('16', "16-bit", "16 bits per channel")
+        ]
+    elif fmt == 'TIFF':
+        # TIFF supports all bit depths
+        return [
+            ('8', "8-bit", "8 bits per channel"),
+            ('16', "16-bit", "16 bits per channel"),
+            ('32', "32-bit", "32 bits per channel (float)")
+        ]
+    elif fmt == 'OPEN_EXR':
+        # OpenEXR only supports 16-bit (half float) and 32-bit (full float)
+        return [
+            ('16', "16-bit Half", "16 bits per channel (half float)"),
+            ('32', "32-bit Float", "32 bits per channel (full float)")
+        ]
+    
+    # Fallback (should not happen)
+    return [
+        ('8', "8-bit", "8 bits per channel"),
+        ('16', "16-bit", "16 bits per channel"),
+        ('32', "32-bit", "32 bits per channel (float)")
+    ]
+
+
 def convert_view_transform_to_blender(view_transform_enum):
     """Convert our enum identifier back to Blender's view transform identifier"""
     if view_transform_enum == 'FOLLOW_SCENE':
@@ -100,12 +135,8 @@ class T4A_MaterialBakeMapSettings(PropertyGroup):
     color_depth: EnumProperty(
         name="Color Depth",
         description="Bit depth for the image",
-        items=[
-            ('8', "8-bit", "8 bits per channel"),
-            ('16', "16-bit", "16 bits per channel"),
-            ('32', "32-bit", "32 bits per channel (float)"),
-        ],
-        default='8'
+        items=get_color_depth_items,
+        default=0
     )
     
     view_transform: EnumProperty(

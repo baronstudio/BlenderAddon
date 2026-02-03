@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - Collection Management Operators
 Operators for managing collection list for 3D baking
 """

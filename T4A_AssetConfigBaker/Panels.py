@@ -1,5 +1,8 @@
 
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - UI Panels
 All UI panels for the 3D View (N-Panel)
 """

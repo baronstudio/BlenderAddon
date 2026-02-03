@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - Properties
 Scene properties for storing addon runtime variables and processing data
 """

@@ -1,4 +1,11 @@
-﻿import bpy
+﻿"""
+Year: 2026
+Author : Tech4Art Conseil
+
+Debug helper for T4A baking properties
+"""
+
+import bpy
 print('=== T4A Baker Props Debug ===')
 if hasattr(bpy.types.Scene, 't4a_baker_props'):
     print(' t4a_baker_props is registered on Scene')

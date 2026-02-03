@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - 3D Export Module V1
 GLB export operators for collections
 """

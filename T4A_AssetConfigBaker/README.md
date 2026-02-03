@@ -111,7 +111,21 @@ Le système `auto_load` détectera automatiquement tout nouveau fichier `.py` aj
 
 ## Licence
 
-GPL-3.0-or-later
+- **Code :** GNU General Public License v3 (GPL-3.0-or-later). Voir le fichier [LICENSE](LICENSE).
+- **Assets (textures, modèles, presets, exemples) :** par défaut sous **Creative Commons Attribution 4.0 (CC BY 4.0)**. Voir [ASSETS_LICENSE.md](ASSETS_LICENSE.md) pour les détails et l'attribution recommandée.
+
+Si certains assets dans `Presets/`, `TestScenes/` ou autres dossiers ont une
+licence différente, la licence spécifique sera indiquée dans le dossier
+concerné.
+
+## Blender
+
+- Compatible avec **Blender 5.0+** (le manifeste `blender_manifest.toml` est
+	fourni).
+- Installation : Edit > Preferences > Extensions > Install from Disk, puis
+	sélectionner le dossier `T4A_AssetConfigBaker` et activer l'extension.
+- Ce dépôt contient le code de l'addon (sous GPLv3). Les assets sont
+	licenciés séparément selon [ASSETS_LICENSE.md](ASSETS_LICENSE.md).
 
 ## Auteur
 

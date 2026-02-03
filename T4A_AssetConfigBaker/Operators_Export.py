@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - Export List Operators
 Operators for managing export collections list
 """

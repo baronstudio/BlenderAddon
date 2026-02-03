@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - Preset Manager
 System for saving and loading custom baking configurations
 """

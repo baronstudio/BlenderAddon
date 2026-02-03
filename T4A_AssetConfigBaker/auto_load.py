@@ -1,3 +1,8 @@
+"""
+Year: 2026
+Author : Tech4Art Conseil
+"""
+
 import os
 import bpy
 import sys

@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - 3D Baking Engine V1
 Operators for 3D asset baking, texture baking, and scene analysis
 """

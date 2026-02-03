@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - Material Baking Engine V1
 Operators for material baking, PBR texture generation, and material optimization
 """

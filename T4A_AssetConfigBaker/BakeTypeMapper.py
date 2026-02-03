@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - Baking Type Mapper
 Maps custom PBR texture types to Blender Cycles bake types
 """

@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - General Baking Utilities
 Prépare la scène pour le baking avec Cycles
 """

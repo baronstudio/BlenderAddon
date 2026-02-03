@@ -1,4 +1,7 @@
 """
+Year: 2026
+Author : Tech4Art Conseil
+
 T4A Assets Configuration Baker - Material UI Operators
 Operators for managing material list and bake maps in the UI
 """

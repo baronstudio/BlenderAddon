@@ -1,3 +1,8 @@
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 bl_info = {
     "name": "T4A_3DFilesQtCheck",
     "author": "Tech4Art Conseil <tech4artconseil@gmail.com>",

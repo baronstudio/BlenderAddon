@@ -3,6 +3,12 @@ Système de remplacement de tags pour les prompts Gemini.
 
 Fonctions pour remplacer les tags dans les prompts avec les valeurs contextuelles.
 """
+
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import os
 import bpy
 

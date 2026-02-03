@@ -7,6 +7,13 @@ Contient :
 Ce module est chargé en premier par `__init__.py` pour garantir
 que les propriétés soient disponibles aux autres modules.
 """
+
+
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import bpy
 import json
 

@@ -6,6 +6,19 @@ Contient :
 - opérateur pour créer des BoundingBox pour chaque collection
 - logique de comparaison et création automatique de helpers
 """
+"""Module pour la comparaison des dimensions et création de BoundingBox.
+
+Contient :
+- opérateur pour comparer les dimensions IA vs modèle 3D
+- opérateur pour créer des BoundingBox pour chaque collection
+- logique de comparaison et création automatique de helpers
+"""
+
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import os
 import bpy
 import mathutils

@@ -4,6 +4,12 @@ Ce module fournit `T4A_OT_InstallDependencies` qui exécute `python -m pip insta
 en utilisant l'exécutable Python courant (`sys.executable`). Il est pensé pour être
 appelé depuis les préférences de l'addon (bouton "Installer dépendances").
 """
+
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import sys
 import subprocess
 import traceback

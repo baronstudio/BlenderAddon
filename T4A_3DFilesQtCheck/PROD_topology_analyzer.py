@@ -1,7 +1,13 @@
 """
 Module d'analyse de topologie 3D pour T4A_3DFilesQtCheck.
 Analyse la qualité géométrique et topologique des mesh 3D.
+"""
 
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""
 Fonctionnalités:
 - Détection manifold/non-manifold
 - Analyse des normales
@@ -9,8 +15,8 @@ Fonctionnalités:
 - Détection vertices dupliqués
 - Analyse vertex colors
 - Distribution des types de polygones
-"""
 
+"""
 import bpy
 import bmesh
 import mathutils

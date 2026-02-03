@@ -1,7 +1,11 @@
-"""
-Module d'analyse et comparaison des dimensions 3D
+"""Module d'analyse et comparaison des dimensions 3D
 Analyse les dimensions réelles des modèles dans la scène et compare avec les données IA
 """
+
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import bpy
 import bmesh

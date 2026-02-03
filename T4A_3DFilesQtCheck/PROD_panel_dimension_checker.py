@@ -7,6 +7,12 @@ Ajoute des boutons pour :
 - Nettoyer les helpers
 - Contrôler la création forcée des BoundingBoxes
 """
+
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import os
 import bpy
 

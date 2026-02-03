@@ -1,7 +1,11 @@
-"""
-Module de stub pour l'analyse d'images (textures, screenshots) et appel API IA.
+"""Module de stub pour l'analyse d'images (textures, screenshots) et appel API IA.
 Ici on place des fonctions qui prépareront l'envoi à des APIs externes.
 """
+
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import base64
 

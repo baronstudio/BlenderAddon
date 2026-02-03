@@ -7,6 +7,11 @@ Fonctionnalités :
 - Intégration avec le système d'import existant
 """
 
+# Copyright (C) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
+# License: GNU General Public License v3.0 or later
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import os
 import shutil
 import bpy

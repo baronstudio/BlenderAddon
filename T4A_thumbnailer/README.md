@@ -24,3 +24,11 @@ Utilisation rapide
 Notes
 - L'add-on utilise la caméra active de la scène. Assurez‑vous qu'une caméra est définie.
 - L'add-on affecte temporairement les matériaux de l'objet et restaure les assignations initiales après batch.
+
+Licence
+-------
+
+- **Licence de cet add-on**: Ce projet est distribué sous la licence GNU General Public License version 3 (GPLv3). Voir le fichier `LICENSE` pour le texte complet.
+- **Remarque sur Blender**: Blender lui-même est publié sous la licence GNU General Public License (généralement "GPL v2 or later"). En utilisant ou en distribuant cet add-on avec Blender, respectez les termes de la licence GPL applicables.
+
+Copyright: 2026 Tech4Art COnseil

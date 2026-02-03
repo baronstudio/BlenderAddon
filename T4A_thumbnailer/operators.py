@@ -1,3 +1,10 @@
+# -----------------------------------------------------------------------------
+# T4A Thumbnailer
+# Copyright (c) 2026 Tech4Art COnseil
+# Author: Tech4Art COnseil
+# Licensed under the GNU General Public License v3.0 (GPL-3.0-or-later)
+# See LICENSE file for details.
+# -----------------------------------------------------------------------------
 import bpy
 import os
 

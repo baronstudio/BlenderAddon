@@ -1,0 +1,34 @@
+schema_version = "1.0.0"
+
+# Metadata
+id = "T4A_thumbnailer"
+name = "T4A Thumbnailer"
+tagline = "Render JPEG thumbnails from the active camera, per material"
+version = "1.0.0"
+type = "add-on"
+
+maintainer = "Jean-Baptiste BARON <contact@tech4art.fr>"
+license = ["SPDX:GPL-3.0-or-later"]
+copyright = ["2026 Tech4Art Conseil"]
+
+# Supported Blender versions (extension platform, tested up to 5.x)
+blender_version_min = "4.2.0"
+
+tags = [
+    "3D View",
+    "Render",
+    "Material",
+]
+
+website = "https://github.com/baronstudio/BlenderAddon/tree/master/T4A_thumbnailer"
+
+[permissions]
+files = "Save rendered thumbnails to the chosen output folder"
+
+[build]
+paths_exclude_pattern = [
+    "__pycache__/",
+    "/.git/",
+    "*.zip",
+    "*.code-workspace",
+]

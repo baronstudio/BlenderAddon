@@ -23,7 +23,7 @@ Each folder is an independent add-on. Install only the ones you need.
 | [**T4A Quick Baker**](T4A_quick_baker/) | PBR texture baker for many objects and materials at once: high-to-low and low-to-low, automatic cage, Unity/Unreal map presets, UDIM. A customized fork of [Quick Baker](https://b3dhub.github.io/quick-baker-docs) by Karan (@b3dhub). | 4.2+ | Stable |
 | [**T4A Assets Configuration Baker**](T4A_AssetConfigBaker/) | Automates asset preparation for web product configurators. It analyzes the scene hierarchy, materials and naming, generates bake configurations from presets (glTF, game, Three.js…) and exports clean GLB files. | 5.0+ | Beta |
 | [**T4A 3D Files QC Check**](T4A_3DFilesQtCheck/) | Quality-control checks for 3D files: mesh topology, UVs, texel density, textures, dimensions and scale, with optional AI-assisted reviews (Gemini). | 4.5+ | Work in progress |
-| [**T4A Thumbnailer**](T4A_thumbnailer/) | Renders JPEG thumbnails from the active camera, including one image per material in batch mode. | 2.80+ | Stable |
+| [**T4A Thumbnailer**](T4A_thumbnailer/) | Renders JPEG thumbnails from the active camera, including one image per material in batch mode. | 4.2+ | Stable |
 | [**T4A Dev Tools**](T4A_DevTools/) | Helpers for add-on developers: hot-reload any enabled add-on, reload scripts, open add-on folders, toggle the system console and developer options. | 4.2+ | Stable |
 
 ## Installation

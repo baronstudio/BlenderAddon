@@ -1,0 +1,23 @@
+schema_version = "1.0.0"
+
+# Metadata
+id = "T4A_DevTools"
+name = "T4A Dev Tools"
+tagline = "Hot-reload add-ons and quick developer helpers"
+version = "1.0.0"
+type = "add-on"
+
+maintainer = "Jean-Baptiste BARON <contact@tech4art.fr>"
+license = ["SPDX:GPL-3.0-or-later"]
+
+blender_version_min = "4.2.0"
+
+tags = [
+    "3D View",
+    "Development",
+]
+
+website = "https://github.com/baronstudio/BlenderAddon/tree/master/T4A_DevTools"
+
+[permissions]
+files = "Open add-on folders in the system file browser"

@@ -1,11 +1,12 @@
 # -----------------------------------------------------------------------------
 # T4A Thumbnailer
-# Copyright (c) 2026 Tech4Art COnseil
-# Author: Tech4Art COnseil
+# Copyright (c) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
 # Licensed under the GNU General Public License v3.0 (GPL-3.0-or-later)
 # See LICENSE file for details.
 # -----------------------------------------------------------------------------
 import bpy
+
 
 class T4A_Props(bpy.types.PropertyGroup):
     output_folder: bpy.props.StringProperty(
@@ -33,12 +34,7 @@ class T4A_Props(bpy.types.PropertyGroup):
         default=90,
         min=1,
         max=100,
-        description="Qualité du JPEG de sortie (0-100)"
-    )
-    use_batch: bpy.props.BoolProperty(
-        name="Batch tous les matériaux",
-        default=True,
-        description="Si vrai, appliquera tous les matériaux assignés à l'objet sélectionné"
+        description="Qualité du JPEG de sortie (1-100)"
     )
     filename_suffix: bpy.props.StringProperty(
         name="Suffixe fichier",

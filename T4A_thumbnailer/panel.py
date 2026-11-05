@@ -1,11 +1,12 @@
 # -----------------------------------------------------------------------------
 # T4A Thumbnailer
-# Copyright (c) 2026 Tech4Art COnseil
-# Author: Tech4Art COnseil
+# Copyright (c) 2026 Tech4Art Conseil
+# Author: Tech4Art Conseil
 # Licensed under the GNU General Public License v3.0 (GPL-3.0-or-later)
 # See LICENSE file for details.
 # -----------------------------------------------------------------------------
 import bpy
+
 
 class T4A_PT_thumbnail_panel(bpy.types.Panel):
     bl_label = "T4A Thumbnailer"
@@ -16,18 +17,22 @@ class T4A_PT_thumbnail_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        scene = context.scene
-        props = scene.t4a_thumbnailer
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        props = context.scene.t4a_thumbnailer
 
         col = layout.column()
         col.prop(props, "output_folder")
-        row = col.row(align=True)
-        row.prop(props, "resolution_x")
-        row.prop(props, "resolution_y")
+        sub = col.column(align=True)
+        sub.prop(props, "resolution_x")
+        sub.prop(props, "resolution_y")
         col.prop(props, "jpeg_quality")
         col.prop(props, "filename_suffix")
-        col.prop(props, "use_batch")
 
-        col.separator()
-        col.operator("t4a.thumbnail_render_active", text="Rendre vignette active")
-        col.operator("t4a.thumbnail_batch", text="Batch materials")
+        if context.scene.camera is None:
+            layout.label(text="Aucune caméra active dans la scène", icon='ERROR')
+
+        col = layout.column(align=True)
+        col.scale_y = 1.2
+        col.operator("t4a.thumbnail_render_active", text="Rendre vignette active", icon='RENDER_STILL')
+        col.operator("t4a.thumbnail_batch", text="Batch matériaux", icon='MATERIAL')

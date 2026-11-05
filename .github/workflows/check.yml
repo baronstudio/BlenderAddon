@@ -14,4 +14,4 @@ jobs:
         with:
           python-version: "3.11"  # Python version bundled with Blender 4.x
       - name: Byte-compile all add-ons
-        run: python -m compileall -q T4A_3DFilesQtCheck T4A_AssetConfigBaker T4A_quick_baker T4A_thumbnailer T4A_DevTools .tools
+        run: python -m compileall -q T4A_3DFilesQtCheck T4A_AssetConfigBaker T4A_quick_baker T4A_thumbnailer T4A_DevTools .tools install_addons.py

@@ -28,7 +28,18 @@ Each folder is an independent add-on. Install only the ones you need.
 
 ## Installation
 
-### Option 1: from a ZIP (recommended)
+### Option 1: installer script (quickest)
+
+From a clone or extracted download of the repository, run:
+
+```bash
+python install_addons.py            # interactive
+python install_addons.py --dry-run  # preview, changes nothing
+```
+
+The script detects your installed Blender versions, then asks in the terminal which versions and add-ons to install, whether to **copy** them or **link** them to the repository (for development), and whether to enable them in Blender's preferences. It skips add-ons that need a newer Blender. Close Blender before running it.
+
+### Option 2: from a ZIP
 
 1. Download the repository (**Code → Download ZIP**) or a release, then extract it.
 2. Zip **the add-on folder you want** on its own, for example `T4A_thumbnailer/` → `T4A_thumbnailer.zip`.
@@ -37,7 +48,7 @@ Each folder is an independent add-on. Install only the ones you need.
    - **Older versions**: click **Install…** and pick the ZIP.
 4. Enable the add-on. Its panel appears in the **3D View sidebar** (press `N`).
 
-### Option 2: for developers
+### Option 3: manual link for developers
 
 Clone the repo and link an add-on folder into your Blender extensions or add-ons directory:
 

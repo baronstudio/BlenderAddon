@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/baronstudio/BlenderAddon/security/advisories/new
+    about: Please report security issues privately.
+  - name: 📘 Original Quick Baker documentation
+    url: https://b3dhub.github.io/quick-baker-docs
+    about: Docs for the upstream Quick Baker add-on that T4A Quick Baker is based on.

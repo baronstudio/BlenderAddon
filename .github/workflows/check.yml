@@ -1,0 +1,17 @@
+name: Python syntax check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # Python version bundled with Blender 4.x
+      - name: Byte-compile all add-ons
+        run: python -m compileall -q T4A_3DFilesQtCheck T4A_AssetConfigBaker T4A_quick_baker T4A_thumbnailer .tools

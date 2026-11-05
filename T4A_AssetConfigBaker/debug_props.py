@@ -14,7 +14,7 @@ if hasattr(bpy.types.Scene, 't4a_baker_props'):
         print(' Current scene has t4a_baker_props')
         props = scene.t4a_baker_props
         print(f'  - Type: {type(props)}')
-        print(f'  - Has materials: {hasattr(props, \"materials\")}')
+        print(f'  - Has materials: {hasattr(props, "materials")}')
     else:
         print(' Current scene does NOT have t4a_baker_props')
 else:

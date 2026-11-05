@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Blender backups / temp
+*.blend1
+*.blend2
+*.blend@*
+*__backup.blend
+
+# Build output
+build/
+dist/
+releases/
+*.zip
+
+# Editors / OS
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.credentials/

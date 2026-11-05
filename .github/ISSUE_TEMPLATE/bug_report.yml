@@ -1,0 +1,50 @@
+name: 🐛 Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: addon
+    attributes:
+      label: Add-on
+      options:
+        - T4A Quick Baker
+        - T4A Assets Configuration Baker
+        - T4A 3D Files QC Check
+        - T4A Thumbnailer
+    validations:
+      required: true
+  - type: input
+    id: blender
+    attributes:
+      label: Blender version
+      placeholder: "e.g. 4.2.3 LTS"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "e.g. Windows 11, macOS 15, Ubuntu 24.04"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a new scene
+        2. ...
+  - type: textarea
+    id: log
+    attributes:
+      label: Console output / traceback
+      description: Window → Toggle System Console (Windows), or launch Blender from a terminal.
+      render: shell
+  - type: markdown
+    attributes:
+      value: "⚠️ Don't paste API keys or attach confidential `.blend` files."

@@ -1,0 +1,32 @@
+name: 💡 Feature request
+description: Suggest an idea or improvement
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: addon
+    attributes:
+      label: Add-on
+      options:
+        - T4A Quick Baker
+        - T4A Assets Configuration Baker
+        - T4A 3D Files QC Check
+        - T4A Thumbnailer
+        - New add-on / general
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe your workflow and what's slow or missing.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / references
+      description: Other add-ons, tools or screenshots that show the idea.
